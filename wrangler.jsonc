@@ -26,5 +26,9 @@
       "bucket_name": "bbs",
       "preview_bucket_name": "bbs"
     }
-  ]
+  ],
+  "vars": {
+    // 开启「仅第三方登录」后，登录/注册页展示的提示文案（留空则使用内置默认文案）
+    "OAUTH_ONLY_NOTICE": ""
+  }
 }

@@ -380,7 +380,11 @@ async function buildConfigResponse(env: Env) {
   })
   return json({
     success: true,
-    data: getPublicSysConfig(config),
+    data: {
+      ...getPublicSysConfig(config),
+      // 提示文案来自部署时注入的环境变量（wrangler.jsonc vars / secret），不存数据库
+      oauthNotice: String(env.OAUTH_ONLY_NOTICE || ''),
+    },
     version: APP_VERSION,
   }, headers)
 }
@@ -401,6 +405,9 @@ async function handleLogin(request: Request, env: Env) {
   }
 
   const config = await getSysConfig(env)
+  if (config.oauthOnly) {
+    return json({ success: false, message: String(env.OAUTH_ONLY_NOTICE || '本站已开启仅第三方账号登录，请使用第三方登录') })
+  }
   if (config.turnstile?.enable) {
     const turnstile = await verifyTurnstile(config.turnstile.secretKey, body.token, 'login', request)
     if (!turnstile.success) {
@@ -455,6 +462,9 @@ async function handleRegister(request: Request, env: Env) {
   }
 
   const config = await getSysConfig(env)
+  if (config.oauthOnly) {
+    return json({ success: false, message: String(env.OAUTH_ONLY_NOTICE || '本站已开启仅第三方账号登录注册，请前往登录页使用第三方账号') })
+  }
   if (config.turnstile?.enable) {
     const turnstile = await verifyTurnstile(config.turnstile.secretKey, body.token, 'reg', request)
     if (!turnstile.success) {

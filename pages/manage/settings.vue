@@ -238,6 +238,7 @@ function createDefaultState() {
     invite: false,
     createInviteCodePoint: 100,
     regWithEmailCodeVerify: false,
+    oauthOnly: false,
     email: {
       apiKey: '',
       from: '',
@@ -403,6 +404,11 @@ async function persistSettings(options: { reload?: boolean, successMessage?: str
   }
 
   if (!validateOAuthProviders()) {
+    return false
+  }
+
+  if (state.oauthOnly && !state.oauth2.providers.some(provider => provider.enabled)) {
+    toast.error('开启了「仅第三方登录」，请先至少启用一个第三方登录方式，否则没有人能登录')
     return false
   }
 
@@ -766,6 +772,17 @@ async function copyWebhook() {
           <div class="flex flex-col space-y-3">
             <p class="text-sm text-gray-500">
               配置后登录页会出现对应的第三方登录按钮。已存在的邮箱账号会在首次第三方登录时自动绑定，不会重复创建用户。
+            </p>
+
+            <UFormGroup label="仅允许第三方登录/注册" name="oauthOnly" hint="关闭站内账号密码登录与注册，只能通过下方启用的第三方账号登录">
+              <div class="flex items-center gap-3">
+                <UToggle v-model="state.oauthOnly" />
+                <span class="text-sm text-gray-500">{{ state.oauthOnly ? '是（账号密码登录已关闭）' : '否' }}</span>
+              </div>
+            </UFormGroup>
+            <p v-if="state.oauthOnly" class="text-xs text-amber-500">
+              注意：开启后登录/注册页的账号密码表单会隐藏，接口也会拒绝账号密码登录。请确保下方至少有一个已启用的第三方登录方式。
+              提示文案在部署时通过环境变量 OAUTH_ONLY_NOTICE 配置（见 wrangler.jsonc 的 vars），不占用数据库。
             </p>
 
             <div v-if="!state.oauth2.providers.length" class="text-sm text-gray-400">

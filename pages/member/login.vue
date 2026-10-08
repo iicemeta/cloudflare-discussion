@@ -99,7 +99,11 @@ async function login(data: Schema, token: string = '') {
       </div>
     </template>
     <div class="flex flex-col my-2 lg:w-[300px] mx-auto">
+      <p v-if="sysconfig.oauthOnly" class="text-sm text-gray-500 text-center mb-2">
+        {{ sysconfig.oauthNotice || '本站仅支持第三方账号登录，请使用下方按钮登录或注册。' }}
+      </p>
       <UForm
+        v-if="!sysconfig.oauthOnly"
         :schema="loginRequestSchema" :state="state" :validate-on="['submit']" class="space-y-4" autocomplete="off"
         @submit="onSubmit"
       >
@@ -130,7 +134,7 @@ async function login(data: Schema, token: string = '') {
       </UForm>
 
       <div v-if="oauthProviders.length" class="mt-4">
-        <div class="flex items-center gap-2 my-3">
+        <div v-if="!sysconfig.oauthOnly" class="flex items-center gap-2 my-3">
           <div class="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
           <span class="text-xs text-gray-400">或使用第三方账号登录</span>
           <div class="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
@@ -149,6 +153,9 @@ async function login(data: Schema, token: string = '') {
           </UButton>
         </div>
       </div>
+      <p v-else-if="sysconfig.oauthOnly" class="text-sm text-red-500 text-center mt-2">
+        管理员已开启仅第三方登录，但还没有配置可用的第三方登录方式，请联系管理员。
+      </p>
     </div>
   </UCard>
 </template>

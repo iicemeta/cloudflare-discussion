@@ -27,6 +27,9 @@ const global = useGlobalConfig()
 const sysconfig = global.value?.sysConfig as SysConfigDTO
 const turnstileRef = ref<{ execute: () => Promise<string> } | null>(null)
 
+const oauthOnly = computed(() => Boolean(sysconfig.oauthOnly))
+const oauthNotice = computed(() => sysconfig.oauthNotice || '本站仅支持第三方账号登录注册，请前往登录页使用第三方账号登录。')
+
 async function doReg(data: Schema, token: string = '') {
   const result = await $fetch('/api/member/reg', {
     method: 'POST',
@@ -84,7 +87,16 @@ async function sendEmail() {
       </div>
     </template>
     <div class="flex flex-col my-2 lg:w-[300px] mx-auto">
+      <template v-if="oauthOnly">
+        <p class="text-sm text-gray-500 text-center mb-3">
+          {{ oauthNotice }}
+        </p>
+        <UButton block color="gray" variant="soft" icon="i-carbon-login" @click="navigateTo('/member/login')">
+          去登录
+        </UButton>
+      </template>
       <UForm
+        v-else
         :schema="regRequestSchema" :state="state" :validate-on="['submit']" class="space-y-4" autocomplete="off"
         @submit="onSubmit"
       >

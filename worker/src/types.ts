@@ -47,6 +47,8 @@ export interface Env {
   TOKEN_KEY?: string
   AVATAR_CDN?: string
   COOKIE_SECURE?: string
+  /** 开启「仅第三方登录」后，登录/注册页展示的提示文案；部署时在 wrangler.jsonc vars 里配置，不落库 */
+  OAUTH_ONLY_NOTICE?: string
 }
 
 export interface CurrentUser {

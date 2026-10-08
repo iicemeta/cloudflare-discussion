@@ -243,6 +243,10 @@ export interface SysConfigDTO {
     to: string
   } | null
   regWithEmailCodeVerify: boolean
+  /** 仅允许第三方（OAuth2）登录注册，关闭站内账号密码登录 */
+  oauthOnly: boolean
+  /** 仅第三方登录时的提示文案，来自部署时注入的环境变量 OAUTH_ONLY_NOTICE */
+  oauthNotice?: string
   turnstile: {
     siteKey: string
     secretKey: string

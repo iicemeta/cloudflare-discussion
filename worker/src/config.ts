@@ -28,6 +28,7 @@ export const defaultSysConfig = {
   invite: false,
   createInviteCodePoint: 100,
   regWithEmailCodeVerify: false,
+  oauthOnly: false,
   email: {
     apiKey: '',
     from: '',
