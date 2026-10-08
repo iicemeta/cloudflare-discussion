@@ -140,6 +140,67 @@ onMounted(() => {
 })
 
 /** 回调地址优先取管理员当前访问的域名（地址栏 origin），取不到再退回「论坛地址」配置 */
+/** Cloudflare Access 端点由「团队名 + Client ID」完全决定，这里做本地拼装（纯 UI 草稿，不落库） */
+const cfAccessDraft = reactive<Record<string, string>>({})
+
+function fillCloudflareAccess(provider: OAuthProviderDTO) {
+  const raw = String(cfAccessDraft[provider.key] || '').trim()
+  if (!raw) {
+    toast.error('请粘贴 Cloudflare Access 的端点地址，或直接填写团队名')
+    return
+  }
+
+  let team = ''
+  let clientId = ''
+
+  const teamMatch = raw.match(/([a-z0-9-]+)\.cloudflareaccess\.com/i)
+  if (teamMatch) {
+    team = teamMatch[1].toLowerCase()
+  }
+  const clientMatch = raw.match(/\/sso\/oidc\/([A-Za-z0-9_-]+)/)
+  if (clientMatch) {
+    clientId = clientMatch[1]
+  }
+
+  // 只填了团队名
+  if (!team && /^[a-z0-9-]+$/i.test(raw)) {
+    team = raw.toLowerCase()
+  }
+  // 只粘了 Client ID
+  if (!clientId && /^[A-Za-z0-9_-]{16,}$/.test(raw)) {
+    clientId = raw
+  }
+  if (!clientId) {
+    clientId = String(provider.clientId || '').trim()
+  }
+
+  if (!team) {
+    toast.error('识别不出团队名，请粘贴完整端点地址，或直接填写团队名（如 iicemeta）')
+    return
+  }
+  if (!clientId) {
+    toast.error('缺少 Client ID，请先填写 Client ID，或粘贴带 Client ID 的端点地址')
+    return
+  }
+
+  const base = `https://${team}.cloudflareaccess.com/cdn-cgi/access/sso/oidc/${clientId}`
+  provider.clientId = clientId
+  provider.authorizeUrl = `${base}/authorization`
+  provider.tokenUrl = `${base}/token`
+  provider.userInfoUrl = `${base}/userinfo`
+  provider.scope = 'openid email profile'
+  provider.idField = 'sub'
+  provider.emailField = 'email'
+  if (!provider.nameField) {
+    provider.nameField = 'name'
+  }
+  if (!provider.name || provider.name === oauthProviderPresets.generic.name) {
+    provider.name = 'Cloudflare Access'
+  }
+
+  toast.success(`已填充 Cloudflare Access 端点（团队：${team}）`)
+}
+
 const oauthCallbackBase = computed(() => currentOrigin.value || normalizeWebsiteUrl(state.websiteUrl) || 'https://你的域名')
 
 function oauthCallbackUrl(provider: OAuthProviderDTO) {
@@ -747,6 +808,26 @@ async function copyWebhook() {
                 <UFormGroup label="Client Secret" class="w-[320px]">
                   <UInput v-model="provider.clientSecret" type="password" autocomplete="off" />
                 </UFormGroup>
+              </div>
+
+              <div
+                v-if="provider.type === 'generic'"
+                class="flex flex-wrap items-end gap-2 rounded bg-gray-50 dark:bg-slate-800/60 p-2"
+              >
+                <UFormGroup
+                  label="Cloudflare Access 快速填充"
+                  class="min-w-[380px] flex-1"
+                  hint="粘贴 CF 后台任意一条端点地址（含 Client ID），或只填团队名"
+                >
+                  <UInput
+                    v-model="cfAccessDraft[provider.key]"
+                    placeholder="https://<团队名>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<Client ID>/authorization"
+                    autocomplete="off"
+                  />
+                </UFormGroup>
+                <UButton class="mb-1" size="xs" color="primary" variant="soft" @click="fillCloudflareAccess(provider)">
+                  自动填充端点
+                </UButton>
               </div>
 
               <div class="flex flex-row space-x-2">

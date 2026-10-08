@@ -486,10 +486,9 @@ function resolveProviderUserId(provider: OAuthProviderConfig, profile: Record<st
   return value === undefined || value === null ? '' : String(value).trim()
 }
 
+/** 服务商返回的显示名，仅用于记录在 oauth_accounts.username，不直接当本站用户名 */
 function resolveProviderName(provider: OAuthProviderConfig, profile: Record<string, any>) {
-  const value = getFieldValue(profile, provider.nameField)
-  const name = String(value || '').trim()
-  return name || `${provider.name}用户`
+  return String(getFieldValue(profile, provider.nameField) || '').trim()
 }
 
 function resolveProviderAvatar(provider: OAuthProviderConfig, profile: Record<string, any>) {
@@ -541,7 +540,7 @@ async function resolveOAuthUser(
   const now = nowIso()
   const userCount = await queryCount(env, 'SELECT COUNT(*) AS count FROM users', [])
   const uid = randomId('u')
-  const username = await buildUniqueUsername(env, displayName)
+  const username = await buildUniqueUsername(env, buildUsernameCandidates(provider, profile, email, providerUserId))
   const passwordHash = await hashPassword(randomId('oauth-')) // 随机口令，使该账号无法用密码登录
   const avatarHash = await sha256Hex(email)
   const secretKey = randomId('')
@@ -583,27 +582,68 @@ async function linkOAuthAccount(
   `, [now, now, provider.key, providerUserId, uid, email || null, username || null, avatar || null])
 }
 
+/** 昵称字段取不到时，依次尝试这些常见用户名 claim（点号路径） */
+const USERNAME_CLAIM_FALLBACKS = ['preferred_username', 'username', 'login', 'nickname', 'global_name', 'given_name', 'common_name']
+
+/**
+ * 生成用户名候选，按优先级排序：
+ * 配置的昵称字段 → 常见用户名 claim → 邮箱前缀 → 服务商标识_第三方ID。
+ * 注意：绝不使用服务商「显示名称」（会得到 Cloudflare_Zero_Trus 这种垃圾用户名）。
+ */
+function buildUsernameCandidates(
+  provider: OAuthProviderConfig,
+  profile: Record<string, any>,
+  email: string,
+  providerUserId: string,
+) {
+  const candidates: string[] = []
+  const push = (value: any) => {
+    const text = String(value ?? '').trim()
+    if (text && !candidates.includes(text)) {
+      candidates.push(text)
+    }
+  }
+
+  push(getFieldValue(profile, provider.nameField))
+  for (const claim of USERNAME_CLAIM_FALLBACKS) {
+    if (claim !== provider.nameField) {
+      push(getFieldValue(profile, claim))
+    }
+  }
+  if (email.includes('@')) {
+    push(email.split('@')[0])
+  }
+  push(`${provider.key}_${providerUserId}`)
+
+  return candidates
+}
+
 function sanitizeUsername(raw: string) {
   const cleaned = String(raw || '')
     .trim()
     .replace(/\s+/g, '_')
     .replace(/[^\p{L}\p{N}_.-]/gu, '')
-  return cleaned.slice(0, 20)
+  return cleaned.slice(0, 24)
 }
 
-async function buildUniqueUsername(env: Env, base: string) {
-  let candidate = sanitizeUsername(base)
-  if (candidate.length < 3) {
-    candidate = `${candidate}user`.slice(0, 20)
+async function buildUniqueUsername(env: Env, candidates: string[]) {
+  const bases = candidates
+    .map(sanitizeUsername)
+    .filter(name => name.length >= 3)
+
+  if (bases.length === 0) {
+    bases.push(`user${randomId('').slice(0, 6)}`)
   }
 
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const name = attempt === 0 ? candidate : `${candidate}${attempt}`
-    const exists = await queryCount(env, 'SELECT COUNT(*) AS count FROM users WHERE username = ?', [name])
-    if (exists === 0) {
-      return name
+  for (const base of bases) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const name = attempt === 0 ? base : `${base}${attempt}`
+      const exists = await queryCount(env, 'SELECT COUNT(*) AS count FROM users WHERE username = ?', [name])
+      if (exists === 0) {
+        return name
+      }
     }
   }
 
-  return `${candidate}${Date.now().toString(36)}`.slice(0, 24)
+  return `user${Date.now().toString(36)}`
 }
