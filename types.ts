@@ -147,6 +147,10 @@ export interface TagDTO {
   enName: string
   count: number
   hot?: boolean
+  /** 允许发帖的头衔 ID 列表(空 = 不限制) */
+  postRoleIds?: number[]
+  /** 允许发帖的头衔(已解析名称,已删除的头衔会被过滤) */
+  postRoles?: Array<{ id: number, title: string }>
 }
 export interface TitleDTO {
   id: number

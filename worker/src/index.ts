@@ -8,7 +8,7 @@ import { queryPointSum } from './post'
 import { all, first, run, queryCount } from './db'
 import { getCurrentUser, isAdmin, buildCookie, expireCookie, getTokenKey, mapCurrentUser, sanitizeUser, ensureUserSecretKey, publicUsernameFields, isNicknameTaken } from './auth'
 import { defaultSysConfig, getSysConfig, getPublicSysConfig, saveSysConfig } from './config'
-import { buildTagListResponse, buildMemberHotResponse, mapTag } from './tag'
+import { attachTagRoles, buildTagListResponse, buildMemberHotResponse, mapTag, parsePostRoleIds } from './tag'
 import { buildPostListResponse, handlePostDetail, buildPostSummaries, syncPostPoint, getPostListInputFromUrl } from './post'
 import { handleCommentReaction, handleCommentDetail, buildCommentWithPost, buildCommentsWithPosts } from './comment'
 import { handleMemberDetail, buildProfile, buildUserSummary, getUserTitles, getUserTitlesMap } from './member'
@@ -686,6 +686,20 @@ async function handlePostNew(request: Request, env: Env, currentUser: CurrentUse
     return json({ success: false, message: '标题、内容或标签不合法' })
   }
 
+  // 标签发帖头衔限制:配置了 post_roles 的标签,仅限拥有其中任一头衔的用户发帖(管理员豁免)
+  const tagRow = await first(env, 'SELECT post_roles FROM tags WHERE id = ?', [tagId])
+  if (!tagRow) {
+    return json({ success: false, message: '标签不存在' })
+  }
+  const postRoleIds = parsePostRoleIds(tagRow.post_roles)
+  if (postRoleIds.length && !isAdmin(currentUser)) {
+    const placeholders = postRoleIds.map(() => '?').join(',')
+    const owned = await queryCount(env, `SELECT COUNT(*) AS count FROM user_titles WHERE user_id = ? AND title_id IN (${placeholders})`, [currentUser.id, ...postRoleIds])
+    if (!owned) {
+      return json({ success: false, message: '该标签仅限指定头衔的用户发帖' })
+    }
+  }
+
   const config = await getSysConfig(env)
   if (config.turnstile?.enable) {
     const turnstile = await verifyTurnstile(config.turnstile.secretKey, body.token, 'newPost', request)
@@ -1122,9 +1136,9 @@ async function handleManageTagList(request: Request, env: Env, currentUser: Curr
   const body = await readBody(request)
   const page = getPage(body.page)
   const size = getSize(body.size, 20)
-  const rows = await all(env, 'SELECT id, name, en_name, "desc", count, hot FROM tags ORDER BY hot DESC, id DESC LIMIT ? OFFSET ?', [size, (page - 1) * size])
+  const rows = await all(env, 'SELECT id, name, en_name, "desc", count, hot, post_roles FROM tags ORDER BY hot DESC, id DESC LIMIT ? OFFSET ?', [size, (page - 1) * size])
   const total = await queryCount(env, 'SELECT COUNT(*) AS count FROM tags', [])
-  return json({ success: true, tags: rows.map(mapTag), total })
+  return json({ success: true, tags: await attachTagRoles(env, rows.map(mapTag)), total })
 }
 
 async function handleManageSaveTag(request: Request, env: Env, currentUser: CurrentUser | null) {
@@ -1149,11 +1163,22 @@ async function handleManageSaveTag(request: Request, env: Env, currentUser: Curr
   if (duplicate) {
     return json({ success: false, message: '标签名称或编码已存在' })
   }
+  // 发帖头衔限制:空数组 = 不限制
+  const rawRoleIds = Array.isArray(body.postRoleIds) ? body.postRoleIds : []
+  const postRoleIds = [...new Set(rawRoleIds.map((v: any) => Number(v)).filter((v: number) => Number.isInteger(v) && v > 0))]
+  if (postRoleIds.length) {
+    const placeholders = postRoleIds.map(() => '?').join(',')
+    const found = await queryCount(env, `SELECT COUNT(*) AS count FROM titles WHERE id IN (${placeholders})`, postRoleIds)
+    if (found !== postRoleIds.length) {
+      return json({ success: false, message: '存在无效的头衔,请重新选择' })
+    }
+  }
+  const postRolesValue = postRoleIds.length ? JSON.stringify(postRoleIds) : null
   if (id > 0) {
-    await run(env, 'UPDATE tags SET name = ?, en_name = ?, "desc" = ? WHERE id = ?', [name, enName, desc, id])
+    await run(env, 'UPDATE tags SET name = ?, en_name = ?, "desc" = ?, post_roles = ? WHERE id = ?', [name, enName, desc, postRolesValue, id])
   }
   else {
-    await run(env, 'INSERT INTO tags (name, en_name, "desc", count, hot) VALUES (?, ?, ?, 0, 0)', [name, enName, desc])
+    await run(env, 'INSERT INTO tags (name, en_name, "desc", count, hot, post_roles) VALUES (?, ?, ?, 0, 0, ?)', [name, enName, desc, postRolesValue])
   }
   return json({ success: true })
 }

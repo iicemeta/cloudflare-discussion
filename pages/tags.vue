@@ -18,6 +18,7 @@ const tagList = computed(() => {
         v-for="tag in tagList"
         :key="tag.name" color="gray" variant="solid" size="md"
         class="cursor-pointer "
+        :title="tag.postRoles?.length ? `仅限头衔「${tag.postRoles.map(role => role.title).join('、')}」的用户发帖` : undefined"
       >
         <NuxtLink :to="`/go/${tag.enName}`">
           {{ tag.name }}
