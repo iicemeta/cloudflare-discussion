@@ -2,13 +2,13 @@
 import type { PostDTO } from '~/types'
 
 const props = defineProps({
-  username: String,
+  uid: String,
 })
 
 const route = useRoute()
 
 useHead({
-  title: `${props.username}的收藏`,
+  title: `${displayNameOf({ uid: props.uid })}的帖子`,
 })
 
 const state = reactive({
@@ -17,9 +17,9 @@ const state = reactive({
   page: 1,
   size: 50,
 })
-const { data: postRes } = await useFetch<{ total: number, posts: Array<PostDTO> }>('/api/member/fav', {
+const { data: postRes } = await useFetch<{ total: number, posts: Array<PostDTO> }>('/api/member/post', {
   method: 'POST',
-  body: { page: state.page, size: state.size, username: props.username },
+  body: { page: state.page, size: state.size, uid: props.uid },
 })
 
 state.posts = postRes.value?.posts || []
@@ -27,12 +27,12 @@ state.total = postRes.value?.total || 0
 
 watch(() => route.fullPath, async () => {
   const page = Number.parseInt(route.query.page as any as string)
-  const res = await $fetch('/api/member/fav', {
+  const res = await $fetch('/api/member/post', {
     method: 'POST',
     body: JSON.stringify({
       page,
       size: state.size,
-      username: props.username,
+      uid: props.uid,
     }),
   })
   state.posts = res.posts as any as PostDTO[]
@@ -41,21 +41,21 @@ watch(() => route.fullPath, async () => {
 
 watch(() => state.page, async () => {
   if (state.page === 1) {
-    navigateTo(`/member/${props.username}/fav`)
+    navigateTo(`/member/${props.uid}`)
     return
   }
-  navigateTo(`/member/${props.username}/fav?page=${state.page}`)
+  navigateTo(`/member/${props.uid}?page=${state.page}`)
 })
 const selectedTab = useState('profileSelectedTab', () => 'post')
-selectedTab.value = 'fav'
+selectedTab.value = 'post'
 </script>
 
 <template>
-  <div v-if="state.posts.length > 0" class="flex flex-col">
+  <div v-if="state.posts.length > 0" class="flex flex-col divide-y divide-gray-100 dark:divide-slate-700">
     <XPost v-for="post in state.posts" :key="post.pid" :show-avatar="false" v-bind="post" />
   </div>
   <div v-else class="flex items-center text-sm text-gray-500">
-    暂无收藏
+    暂无帖子
   </div>
   <UPagination
     v-if="state.total > state.size" v-model="state.page" size="sm" :to="(page: number) => ({

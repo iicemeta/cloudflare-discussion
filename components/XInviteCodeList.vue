@@ -23,7 +23,7 @@ const columns = [{
   key: 'content',
   label: '邀请码',
 }, {
-  key: 'toUser.username',
+  key: 'toUser',
   label: '使用人',
 }]
 
@@ -46,12 +46,12 @@ const total = computed(() => res?.value?.total as number)
           点我复制
         </UButton>
       </template>
-      <template #toUser.username-data="{ row }">
+      <template #toUser-data="{ row }">
         <ULink
           v-if="row.toUser"
-          class="text-green-500" :to="`/member/${row.toUser.username}`"
+          class="text-green-500" :to="profilePathOf(row.toUser)"
         >
-          {{ row.toUser.username }}
+          {{ displayNameOf(row.toUser) }}
         </ULink>
       </template>
       <template #createdAt-data="{ row }">

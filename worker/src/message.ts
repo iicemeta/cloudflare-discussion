@@ -4,6 +4,7 @@ import { json, nowIso, getPage, getSize, readBody, buildSiteLink } from './utils
 import { sendTgMessage, buildPrivateMessageTelegramText } from './telegram'
 import { getSysConfig } from './config'
 import { verifyTurnstile } from './turnstile'
+import { displayNameOf, publicUsernameFields } from './auth'
 
 export function mapMessageUser(row: any, prefix: string) {
   const uid = row[`${prefix}_uid`]
@@ -13,7 +14,7 @@ export function mapMessageUser(row: any, prefix: string) {
 
   return {
     uid,
-    username: row[`${prefix}_username`],
+    ...publicUsernameFields(row, `${prefix}_`),
     avatarUrl: row[`${prefix}_avatar_url`] ?? null,
     headImg: row[`${prefix}_head_img`] ?? null,
     role: row[`${prefix}_role`] || 'USER',
@@ -39,8 +40,8 @@ export async function handleSendPrivateMessage(request: Request, env: Env, curre
 
   const body = await readBody(request)
   const content = String(body.content || '').trim()
-  const toUsername = String(body.toUser || '').trim()
-  if (!content || !toUsername) {
+  const toUser = String(body.toUser || '').trim()
+  if (!content || !toUser) {
     return json({ success: false, message: '内容和接收者不能为空' })
   }
 
@@ -52,7 +53,8 @@ export async function handleSendPrivateMessage(request: Request, env: Env, curre
     }
   }
 
-  const targetUser = await first(env, 'SELECT uid, username, tg_chat_id FROM users WHERE username = ?', [toUsername])
+  // 优先按 uid 找人；同时兼容旧的用户名传参
+  const targetUser = await first(env, 'SELECT uid, username, tg_chat_id FROM users WHERE uid = ? OR username = ? LIMIT 1', [toUser, toUser])
   if (!targetUser) {
     return json({ success: false, message: '接收者不存在' })
   }
@@ -69,7 +71,7 @@ export async function handleSendPrivateMessage(request: Request, env: Env, curre
   await sendTgMessage(
     config,
     targetUser.tg_chat_id,
-    buildPrivateMessageTelegramText(config, currentUser.username, content),
+    buildPrivateMessageTelegramText(config, displayNameOf(currentUser), content),
   )
 
   return json({ success: true, message: '发送成功' })
@@ -99,11 +101,15 @@ export async function handlePrivateMessageInbox(request: Request, env: Env, curr
       m.type,
       fu.uid AS from_user_uid,
       fu.username AS from_user_username,
+      fu.nickname AS from_user_nickname,
+      fu.username_visible AS from_user_username_visible,
       fu.avatar_url AS from_user_avatar_url,
       fu.head_img AS from_user_head_img,
       fu.role AS from_user_role,
       tu.uid AS to_user_uid,
       tu.username AS to_user_username,
+      tu.nickname AS to_user_nickname,
+      tu.username_visible AS to_user_username_visible,
       tu.avatar_url AS to_user_avatar_url,
       tu.head_img AS to_user_head_img,
       tu.role AS to_user_role
@@ -148,12 +154,13 @@ export async function handlePrivateMessageList(request: Request, env: Env, curre
   }
 
   const body = await readBody(request)
-  const fromUsername = String(body.fromUsername || '').trim()
-  if (!fromUsername) {
+  const fromUid = String(body.fromUid || body.fromUsername || '').trim()
+  if (!fromUid) {
     return json({ success: false, message: '用户不存在', list: [] })
   }
 
-  const fromUser = await first(env, 'SELECT uid FROM users WHERE username = ?', [fromUsername])
+  // 优先按 uid 找人；同时兼容旧的用户名传参
+  const fromUser = await first(env, 'SELECT uid FROM users WHERE uid = ? OR username = ? LIMIT 1', [fromUid, fromUid])
   if (!fromUser) {
     return json({ success: false, message: '用户不存在', list: [] })
   }
@@ -232,11 +239,15 @@ export async function handleMemberMessages(request: Request, env: Env, currentUs
       m.type,
       fu.uid AS from_user_uid,
       fu.username AS from_user_username,
+      fu.nickname AS from_user_nickname,
+      fu.username_visible AS from_user_username_visible,
       fu.avatar_url AS from_user_avatar_url,
       fu.head_img AS from_user_head_img,
       fu.role AS from_user_role,
       tu.uid AS to_user_uid,
       tu.username AS to_user_username,
+      tu.nickname AS to_user_nickname,
+      tu.username_visible AS to_user_username_visible,
       tu.avatar_url AS to_user_avatar_url,
       tu.head_img AS to_user_head_img,
       tu.role AS to_user_role

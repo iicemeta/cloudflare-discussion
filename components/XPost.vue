@@ -20,7 +20,7 @@ function doSupport() {
   <div
     class="flex space-x-3 items-start py-2 sm:px-4 px-2"
   >
-    <NuxtLink v-if="showAvatar" :to="`/member/${author.username}`">
+    <NuxtLink v-if="showAvatar" :to="profilePathOf(author)">
       <UAvatar v-if="author && author.avatarUrl" :src="getAvatarUrl(author.avatarUrl, author.headImg)" size="lg" alt="Avatar" />
     </NuxtLink>
     <div class="flex-1">
@@ -74,8 +74,8 @@ function doSupport() {
         <div class="font-semibold flex items-center space-x-1 ">
           <div class="cursor-pointer flex items-center space-x-1 hover:text-primary/50">
             <UIcon name="i-carbon-user" />
-            <NuxtLink :to="`/member/${author.username}`">
-              <span class="inline-block">{{ author.username }}</span>
+            <NuxtLink :to="profilePathOf(author)">
+              <span class="inline-block">{{ displayNameOf(author) }}</span>
             </NuxtLink>
             <UBadge v-for="(t, index) in author.titles" :key="index" size="xs" :color="t.style">
               {{ t.title }}
@@ -97,10 +97,10 @@ function doSupport() {
         <div v-if="props.lastCommentUser" class="hidden md:flex items-center space-x-1 text-primary/40" title="最后回复人">
           <UIcon name="i-carbon-download-study" />
           <NuxtLink
-            :to="`/member/${props.lastCommentUser.username}`"
+            :to="profilePathOf(props.lastCommentUser)"
             class="cursor-pointer hover:text-primary/50 font-bold"
           >
-            <span class="inline-block text-primary/70">{{ props.lastCommentUser.username }}</span>
+            <span class="inline-block text-primary/70">{{ displayNameOf(props.lastCommentUser) }}</span>
           </NuxtLink>
         </div>
         <XUserSig v-if="author.signature" :signature="author.signature" class="ml-4 hidden" />

@@ -15,6 +15,7 @@ const state = reactive<Schema>({
   email: '',
   password: '',
   username: '',
+  nickname: '',
   repeatPassword: '',
   inviteCode: '',
   emailCode: '',
@@ -89,6 +90,9 @@ async function sendEmail() {
       >
         <UFormGroup label="用户名" name="username">
           <UInput v-model="state.username" autocomplete="off" />
+        </UFormGroup>
+        <UFormGroup label="昵称" name="nickname" hint="站点上显示的名字，可留空，之后也能在个人设置里改">
+          <UInput v-model="state.nickname" maxlength="24" autocomplete="off" />
         </UFormGroup>
         <UFormGroup label="邮箱" name="email" hint="请使用常用邮箱,会用来生成头像">
           <UButtonGroup v-if="config.sysConfig.regWithEmailCodeVerify">

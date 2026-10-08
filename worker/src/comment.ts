@@ -2,6 +2,7 @@ import type { Env, CurrentUser, UserTitleSummary } from './types'
 import { all, first, queryCount, run } from './db'
 import { getUserLevelByPoint, json, nowIso, parseJsonArray } from './utils'
 import { getUserTitles } from './member'
+import { displayNameOf, publicUsernameFields } from './auth'
 import { buildSiteLink } from './utils'
 import { sendTgMessage } from './telegram'
 import { getSysConfig } from './config'
@@ -76,7 +77,7 @@ export async function handleCommentReaction(env: Env, currentUser: CurrentUser |
   await run(env, `
     INSERT INTO messages (created_at, updated_at, read, from_uid, to_uid, content, type, relation_id)
     VALUES (?, ?, 0, ?, ?, ?, ?, ?)
-  `, [now, now, currentUser.uid, comment.uid, `你的<a class='text-blue-500 mx-1' href='/post/${comment.pid}#${comment.floor}'>评论</a>被<a class='text-blue-500 mx-1' href='/member/${currentUser.username}'>${currentUser.username}</a>${toggledOff ? '取消' : ''}${type === 'LIKE' ? '点赞了' : '点踩了'}`, type, comment.pid])
+  `, [now, now, currentUser.uid, comment.uid, `你的<a class='text-blue-500 mx-1' href='/post/${comment.pid}#${comment.floor}'>评论</a>被<a class='text-blue-500 mx-1' href='/member/${currentUser.uid}'>${displayNameOf(currentUser)}</a>${toggledOff ? '取消' : ''}${type === 'LIKE' ? '点赞了' : '点踩了'}`, type, comment.pid])
   await sendTgMessage(
     config,
     comment.author_tg_chat_id,
@@ -94,6 +95,8 @@ export async function handleCommentDetail(env: Env, currentUser: CurrentUser | n
       u.id AS author_id,
       u.uid AS author_uid,
       u.username AS author_username,
+      u.nickname AS author_nickname,
+      u.username_visible AS author_username_visible,
       u.avatar_url AS author_avatar_url,
       u.head_img AS author_head_img,
       u.role AS author_role,
@@ -128,7 +131,7 @@ export async function buildComment(env: Env, row: any, currentUserUid: string, p
     mentioned: parseJsonArray(row.mentioned),
     author: {
       uid: row.author_uid,
-      username: row.author_username,
+      ...publicUsernameFields(row, 'author_'),
       avatarUrl: row.author_avatar_url,
       headImg: row.author_head_img,
       role: row.author_role,
@@ -157,7 +160,7 @@ export async function buildCommentWithPost(env: Env, row: any, titlesByUserId?: 
     floor: Number(row.floor ?? 1),
     author: {
       uid: row.author_uid,
-      username: row.author_username,
+      ...publicUsernameFields(row, 'author_'),
       avatarUrl: row.author_avatar_url,
       headImg: row.author_head_img,
       role: row.author_role,

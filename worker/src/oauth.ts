@@ -545,13 +545,15 @@ async function resolveOAuthUser(
   const avatarHash = await sha256Hex(email)
   const secretKey = randomId('')
   const role = userCount === 0 ? 'ADMIN' : 'USER'
+  // 用户名默认不公开（校园网里往往就是学号），把服务商返回的真实姓名放进昵称作为显示名
+  const nickname = displayName ? displayName.slice(0, 24) : null
 
   await run(env, `
     INSERT INTO users (
-      uid, created_at, updated_at, username, password_hash, email, avatar_url, head_img,
+      uid, created_at, updated_at, username, password_hash, email, avatar_url, head_img, nickname,
       point, post_count, comment_count, role, level, status, secret_key
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 100, 0, 0, ?, 1, 'NORMAL', ?)
-  `, [uid, now, now, username, passwordHash, email, avatarHash, avatar || null, role, secretKey])
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 100, 0, 0, ?, 1, 'NORMAL', ?)
+  `, [uid, now, now, username, passwordHash, email, avatarHash, avatar || null, nickname, role, secretKey])
 
   await linkOAuthAccount(env, provider, providerUserId, uid, email, displayName, avatar)
 

@@ -1,7 +1,8 @@
 import type { Env, CurrentUser, UserTitleSummary } from './types'
 import { all, first, queryCount, run } from './db'
 import { json, nowIso, getPage, getSize, parseJsonArray, getUserLevelByPoint, extractMentions } from './utils'
-import { getUserTitlesMap, getUserTitles, getUsernameByUid } from './member'
+import { getUserTitlesMap, getUserTitles } from './member'
+import { publicUsernameFields } from './auth'
 import { buildSiteLink } from './utils'
 import { sendTgMessage } from './telegram'
 import { getSysConfig } from './config'
@@ -30,6 +31,8 @@ export function postListSql(whereClause: string, orderBy: string, tail = '', inc
       au.id AS author_id,
       au.uid AS author_uid,
       au.username AS author_username,
+      au.nickname AS author_nickname,
+      au.username_visible AS author_username_visible,
       au.avatar_url AS author_avatar_url,
       au.head_img AS author_head_img,
       au.role AS author_role,
@@ -41,6 +44,8 @@ export function postListSql(whereClause: string, orderBy: string, tail = '', inc
       t.hot AS tag_hot,
       lu.uid AS last_comment_user_uid,
       lu.username AS last_comment_user_username,
+      lu.nickname AS last_comment_user_nickname,
+      lu.username_visible AS last_comment_user_username_visible,
       p.reply_count AS comments_count,
       p.support_count,
       ${includeFav ? '(SELECT COUNT(*) FROM favorites f WHERE f.pid = p.pid AND f.user_id = ?) AS fav_count' : '0 AS fav_count'}
@@ -124,7 +129,7 @@ export async function buildPostSummary(env: Env, row: any, currentUserId?: numbe
       uid: row.author_uid,
       avatarUrl: row.author_avatar_url,
       headImg: row.author_head_img,
-      username: row.author_username,
+      ...publicUsernameFields(row, 'author_'),
       role: row.author_role,
       titles,
       signature: row.author_signature,
@@ -145,7 +150,7 @@ export async function buildPostSummary(env: Env, row: any, currentUserId?: numbe
     lastCommentUser: row.last_comment_user_uid
       ? {
           uid: row.last_comment_user_uid,
-          username: row.last_comment_user_username,
+          ...publicUsernameFields(row, 'last_comment_user_'),
         }
       : null,
     point: Number(row.point ?? 0),
@@ -245,6 +250,8 @@ export async function handlePostDetail(env: Env, currentUser: CurrentUser | null
       au.id AS author_id,
       au.uid AS author_uid,
       au.username AS author_username,
+      au.nickname AS author_nickname,
+      au.username_visible AS author_username_visible,
       au.avatar_url AS author_avatar_url,
       au.head_img AS author_head_img,
       au.role AS author_role,
@@ -256,6 +263,8 @@ export async function handlePostDetail(env: Env, currentUser: CurrentUser | null
       t.hot AS tag_hot,
       lu.uid AS last_comment_user_uid,
       lu.username AS last_comment_user_username,
+      lu.nickname AS last_comment_user_nickname,
+      lu.username_visible AS last_comment_user_username_visible,
       p.reply_count AS comments_count,
       p.support_count,
       ${includeFav ? '(SELECT COUNT(*) FROM favorites f WHERE f.pid = p.pid AND f.user_id = ?) AS fav_count' : '0 AS fav_count'}
@@ -277,6 +286,8 @@ export async function handlePostDetail(env: Env, currentUser: CurrentUser | null
       u.id AS author_id,
       u.uid AS author_uid,
       u.username AS author_username,
+      u.nickname AS author_nickname,
+      u.username_visible AS author_username_visible,
       u.avatar_url AS author_avatar_url,
       u.head_img AS author_head_img,
       u.role AS author_role,
@@ -336,7 +347,7 @@ async function buildCommentForPostDetail(env: Env, row: any, currentUserUid: str
     mentioned: parseJsonArray(row.mentioned),
     author: {
       uid: row.author_uid,
-      username: row.author_username,
+      ...publicUsernameFields(row, 'author_'),
       avatarUrl: row.author_avatar_url,
       headImg: row.author_head_img,
       role: row.author_role,

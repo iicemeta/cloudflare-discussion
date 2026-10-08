@@ -52,7 +52,7 @@ commentQuoted.on((param: CommentQuotedPayload) => {
   if (state.content.length > 0) {
     content = '\r\n'
   }
-  content = param.cid ? param.content : `${content}[@${param.username}](/member/${param.username}) [#${param.floor}](/post/${param.pid}#${param.floor}) `
+  content = param.cid ? param.content : `${content}[@${param.name}](/member/${param.uid}) [#${param.floor}](/post/${param.pid}#${param.floor}) `
   newCid.value = param.cid
   editorRef.value?.insert(() => {
     return {

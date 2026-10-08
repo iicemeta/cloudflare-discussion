@@ -22,7 +22,7 @@ async function signIn() {
   <UCard class="w-full mt-2">
     <template #header>
       <div class="flex gap-4 items-center">
-        <NuxtLink :to="`/member/${userinfo.username}`">
+        <NuxtLink :to="profilePathOf(userinfo)">
           <UAvatar
             v-if="userinfo.unRead > 0"
             chip-color="rose"
@@ -35,8 +35,8 @@ async function signIn() {
         </NuxtLink>
         <div class="flex flex-col text-sm gap-1">
           <div class="flex justify-between">
-            <NuxtLink class="text-base text-primary font-semibold" :to="`/member/${userinfo.username}`">
-              {{ userinfo.username }}
+            <NuxtLink class="text-base text-primary font-semibold" :to="profilePathOf(userinfo)">
+              {{ displayNameOf(userinfo) }}
             </NuxtLink>
 
             <UBadge class="ml-1" color="primary" variant="solid" size="xs">
@@ -62,7 +62,7 @@ async function signIn() {
     <div class="flex flex-row justify-evenly text-primary/80 text-sm">
       <div class="flex flex-col space-y-1">
         <NuxtLink
-          :to="`/member/${userinfo.username}/message`" :class="{ 'text-red-500': userinfo.unRead > 0 }"
+          :to="profilePathOf(userinfo, 'message')" :class="{ 'text-red-500': userinfo.unRead > 0 }"
           class="space-x-1 flex flex-row items-center cursor-pointer"
         >
           <div class="flex items-center gap-1  text-gray-400" :class="{ 'text-red-500': userinfo.unRead > 0 }">
@@ -89,7 +89,7 @@ async function signIn() {
 
       <div class="flex flex-col space-y-1">
         <NuxtLink
-          :to="`/member/${userinfo.username}`"
+          :to="profilePathOf(userinfo)"
           class="space-x-1 flex flex-row items-center cursor-pointer hover:text-primary/60"
         >
           <div class="flex items-center gap-1  text-gray-400">
@@ -102,7 +102,7 @@ async function signIn() {
         </NuxtLink>
 
         <NuxtLink
-          :to="`/member/${userinfo.username}/fav`"
+          :to="profilePathOf(userinfo, 'fav')"
           class="space-x-1 flex flex-row items-center cursor-pointer hover:text-primary/60"
         >
           <div class="flex items-center gap-1 text-gray-400">
@@ -117,7 +117,7 @@ async function signIn() {
 
       <div class="flex flex-col space-y-1">
         <NuxtLink
-          :to="`/member/${userinfo.username}/comment`"
+          :to="profilePathOf(userinfo, 'comment')"
           class="space-x-1 flex flex-row items-center cursor-pointer hover:text-primary/60"
         >
           <div class="flex items-center gap-1 text-gray-400">
@@ -129,7 +129,7 @@ async function signIn() {
           </div>
         </NuxtLink>
         <NuxtLink
-          :to="`/member/${userinfo.username}/point`"
+          :to="profilePathOf(userinfo, 'point')"
           class="space-x-1 flex flex-row items-center cursor-pointer hover:text-primary/60"
         >
           <div class="flex items-center gap-1 text-gray-400">

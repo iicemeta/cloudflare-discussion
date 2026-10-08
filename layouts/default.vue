@@ -181,7 +181,7 @@ function GoogleSearch() {
             :trailing="false" placeholder="Search..." @keydown.enter="search"
           />
         </UCard>
-        <XUserCard v-if="userinfo && userinfo.username" />
+        <XUserCard v-if="userinfo && userinfo.uid" />
 
         <UCard
           v-if="sysconfig && sysconfig.websiteAnnouncement" class="w-full mt-2"
@@ -243,7 +243,7 @@ function GoogleSearch() {
             </template>
           </UPopover>
         </UCard>
-        <XUserCard v-if="userinfo && userinfo.username" />
+        <XUserCard v-if="userinfo && userinfo.uid" />
         <UCard
           v-if="route.fullPath.startsWith('/go/') && tag" class="profile w-full mt-2"
           :ui="{ header: { padding: 'px-0 py-0 sm:px-0' } }"

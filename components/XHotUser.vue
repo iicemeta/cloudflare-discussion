@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 interface HotUserDTO {
   uid: string
-  username: string
+  nickname?: string | null
+  username?: string
+  usernameVisible?: boolean
   avatarUrl?: string
   headImg?: string
   points: number
@@ -29,12 +31,12 @@ const { data: hotUsers } = useFetch<HotUserDTO[]>('/api/member/hot', {
     <div class="py-1  rounded-t sm:px-6 text-primary ">
       <div class="flex flex-col border rounded dark:border-slate-700">
         <NuxtLink
-          v-for="(user, index) in hotUsers" :key="user.uid" :to="`/member/${user.username}`"
+          v-for="(user, index) in hotUsers" :key="user.uid" :to="profilePathOf(user)"
           class="cursor-pointer hover:bg-slate-50 border-b dark:border-slate-700 p-2 flex gap-x-4 text-sm items-center"
         >
           <div class="flex items-center gap-x-2 font-bold">
             <UAvatar :src="getAvatarUrl(user.avatarUrl!, user.headImg)" size="xs" alt="Avatar" />
-            <span>{{ user.username }}</span>
+            <span>{{ displayNameOf(user) }}</span>
           </div>
           <span>{{ user.points }}分</span>
           <div class="ml-auto" :class="{ 'text-yellow-400': index === 0, 'text-blue-400': index === 1, 'text-green-400': index === 2 }">

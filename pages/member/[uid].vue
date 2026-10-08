@@ -1,0 +1,164 @@
+<script lang="ts" setup>
+import { toast } from 'vue-sonner'
+import type { SysConfigDTO, UserDTO } from '~/types'
+
+const config = useRuntimeConfig()
+const token = useCookie(config.public.tokenKey)
+const route = useRoute()
+const uid = route.params.uid as string
+const { data } = await useFetch(`/api/member/${uid}`, { method: 'POST' })
+const userinfo = data.value as UserDTO
+const selectedTab = ref('post')
+const currentUser = useState<UserDTO>('userinfo', () => ({} as UserDTO))
+useHead({
+  title: `${displayNameOf(userinfo)}的详情`,
+})
+
+const global = useGlobalConfig()
+const sysconfig = global.value?.sysConfig as SysConfigDTO
+
+const isSelf = computed(() => Boolean(currentUser.value?.uid) && currentUser.value.uid === userinfo?.uid)
+
+watch(() => route.fullPath, () => {
+  if (route.fullPath.startsWith(`/member/${uid}/fav`)) {
+    selectedTab.value = 'fav'
+  }
+  else if (route.fullPath.startsWith(`/member/${uid}/comment`)) {
+    selectedTab.value = 'comment'
+  }
+  else if (route.fullPath.startsWith(`/member/${uid}/point`)) {
+    selectedTab.value = 'point'
+  }
+  else if (route.fullPath.startsWith(`/member/${uid}/message`)) {
+    selectedTab.value = 'message'
+  }
+  else if (route.fullPath.startsWith(`/member/${uid}/privateMsg`)) {
+    selectedTab.value = 'privateMsg'
+  }
+  else if (route.fullPath.startsWith(`/member/${uid}/sendMsg`)) {
+    selectedTab.value = ''
+  }
+  else {
+    selectedTab.value = 'post'
+  }
+}, { immediate: true })
+
+const { copy } = useClipboard({})
+
+function copyTgCommand() {
+  const secretKey = String(userinfo.secretKey || '').trim()
+  const username = String(userinfo.username || '').trim()
+  if (!secretKey || !username) {
+    toast.error('当前账户还没有可用的绑定密钥，请刷新页面后重试')
+    return
+  }
+  copy(`/bind ${username}#${secretKey}`)
+  toast.success('复制成功,请发给机器人')
+}
+
+const sendMsgPage = ref(false)
+
+watch(() => route.fullPath, (fullPath: string) => {
+  sendMsgPage.value = fullPath.endsWith('/sendMsg')
+}, {
+  immediate: true,
+})
+</script>
+
+<template>
+  <UCard class="w-full mt-2">
+    <template #header>
+      <div class="flex flex-row gap-2 py-2">
+        <UAvatar v-if="userinfo" :src="getAvatarUrl(userinfo.avatarUrl!, userinfo.headImg)" size="lg" alt="Avatar" />
+        <div class="flex flex-col text-sm gap-1">
+          <div class="flex items-center">
+            <NuxtLink :to="profilePathOf(userinfo)">
+              {{ displayNameOf(userinfo) }}
+            </NuxtLink>
+            <UBadge v-if="userinfo?.usernameVisible && userinfo?.username" color="gray" variant="soft" size="xs" class="ml-1">
+              @{{ userinfo.username }}
+            </UBadge>
+            <UButtonGroup size="xs" class="select-none">
+              <UBadge class="ml-1" color="primary" variant="solid" size="xs">
+                {{ userinfo.role === 'ADMIN' ? '管理员' : '普通用户' }}
+                (lv{{ userinfo.level }})
+              </UBadge>
+              <UButton v-if="currentUser && currentUser.uid !== userinfo.uid" color="gray" variant="solid" :to="profilePathOf(userinfo, 'sendMsg')">
+                私信
+              </UButton>
+            </UButtonGroup>
+            <UBadge v-if="token && userinfo?.status === 'BANNED'">
+              被禁言,到{{ dateFormat(userinfo?.bannedEnd) }}
+            </UBadge>
+          </div>
+          <div class="flex gap-1">
+            <div class="text-xs text-gray-400">
+              {{ dateFormat(userinfo.createdAt) }}加入
+            </div>
+            <div v-if="userinfo.lastActive" class="text-xs text-gray-400">
+              最后活动时间:{{ dateFormat(userinfo.lastActive) }}
+            </div>
+          </div>
+        </div>
+        <div v-if="userinfo && isSelf && sysconfig.notify && sysconfig.notify.tgBotEnabled && !currentUser.tgChatID" class=" ml-auto flex flex-col gap-1">
+          <div class="text-sm">
+            关注<a target="_blank" class="text-green-500" :href="`https://t.me/${sysconfig.notify.tgBotName}`">TG机器人</a>可以实时收到消息通知
+          </div>
+          <div class="text-xs text-gray-400">
+            <span class="text-green-500 cursor-pointer" @click="copyTgCommand">点我复制绑定指令</span>,然后发给上面的机器人即可绑定
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <div v-if="!route.path.endsWith('/sendMsg')" class="flex gap-2 mb-4 flex-wrap">
+      <NuxtLink class="flex flex-row gap-1 items-center" :to="profilePathOf(userinfo)">
+        <UBadge size="lg" :color="selectedTab === 'post' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-add-comment" />
+          <span>帖子({{ userinfo._count ? userinfo._count.posts : 0 }})</span>
+        </UBadge>
+      </NuxtLink>
+
+      <NuxtLink class="flex flex-row gap-1 items-center " :to="profilePathOf(userinfo, 'comment')">
+        <UBadge size="lg" :color="selectedTab === 'comment' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-book" />
+          <span>回复({{ userinfo._count.comments }})</span>
+        </UBadge>
+      </NuxtLink>
+
+      <NuxtLink v-if="token" class="flex flex-row gap-1 items-center" :to="profilePathOf(userinfo, 'fav')">
+        <UBadge size="lg" :color="selectedTab === 'fav' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-favorite" />
+          <span>收藏({{ userinfo._count.fav }})</span>
+        </UBadge>
+      </NuxtLink>
+
+      <NuxtLink class="flex flex-row gap-1 items-center" :to="profilePathOf(userinfo, 'point')">
+        <UBadge size="lg" :color="selectedTab === 'point' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-model" />
+          <span>积分({{ userinfo.point }})</span>
+        </UBadge>
+      </NuxtLink>
+
+      <NuxtLink v-if="isSelf && token" class="flex flex-row gap-1 items-center" :to="profilePathOf(userinfo, 'message')">
+        <UBadge size="lg" :color="selectedTab === 'message' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-notification" />
+          <span :class="[userinfo.unreadMessageCount > 0 && selectedTab !== 'message' ? 'text-red-500' : '']">消息({{ userinfo._count.ReceiveMessage }})</span>
+        </UBadge>
+      </NuxtLink>
+      <NuxtLink
+        v-if="isSelf && token" class="flex flex-row gap-1 items-center"
+        :to="profilePathOf(userinfo, 'privateMsg')"
+      >
+        <UBadge size="lg" :color="selectedTab === 'privateMsg' ? 'primary' : 'white'" variant="solid" class="space-x-1">
+          <UIcon name="i-carbon-chat-bot" />
+          <span :class="[userinfo.unreadPrivateMessageCount > 0 && selectedTab !== 'privateMsg' ? 'text-red-500' : '']">私信({{ userinfo.privateMsgCount ?? 0 }})</span>
+        </UBadge>
+      </NuxtLink>
+    </div>
+
+    <NuxtPage :uid="userinfo.uid" />
+  </UCard>
+</template>
+
+<style scoped></style>

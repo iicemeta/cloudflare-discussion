@@ -1,6 +1,7 @@
 import type { Env } from './types'
 import { all } from './db'
 import { DAY_MS, json } from './utils'
+import { publicUsernameFields } from './auth'
 
 export function mapTag(row: any) {
   return {
@@ -42,12 +43,12 @@ export async function buildTagListResponse(env: Env, url: URL) {
 export async function buildMemberHotResponse(env: Env) {
   const since = new Date(Date.now() - 3 * DAY_MS).toISOString()
   const rows = await all(env, `
-    SELECT u.uid, u.username, u.avatar_url, u.head_img, SUM(ph.point) AS points
+    SELECT u.uid, u.username, u.nickname, u.username_visible, u.avatar_url, u.head_img, SUM(ph.point) AS points
     FROM point_history ph
     JOIN users u ON u.uid = ph.uid
     WHERE ph.created_at > ?
       AND ph.reason NOT IN ('INVITE', 'PUTIN')
-    GROUP BY u.uid, u.username, u.avatar_url, u.head_img
+    GROUP BY u.uid, u.username, u.nickname, u.username_visible, u.avatar_url, u.head_img
     HAVING SUM(ph.point) > 0
     ORDER BY points DESC
     LIMIT 10
@@ -55,7 +56,7 @@ export async function buildMemberHotResponse(env: Env) {
 
   return json(rows.map(row => ({
     uid: row.uid,
-    username: row.username,
+    ...publicUsernameFields(row),
     avatarUrl: row.avatar_url,
     headImg: row.head_img,
     points: Number(row.points ?? 0),

@@ -219,6 +219,22 @@ export function extractMentions(text: string) {
   return (text.match(regex) || []).map(match => match.slice(1, -1))
 }
 
+/**
+ * 从 `[@昵称](/member/<uid>)` 形态的提及里取出被提及者的 uid。
+ * 用 uid 而不是昵称/用户名来定位，昵称可以重复、用户名默认不公开。
+ */
+export function extractMentionUids(text: string) {
+  const regex = /\[@[^\]]*\]\(\/member\/([^)\s?#]+)/g
+  const uids: string[] = []
+  for (const match of text.matchAll(regex)) {
+    const uid = String(match[1] || '').trim()
+    if (uid && !uids.includes(uid)) {
+      uids.push(uid)
+    }
+  }
+  return uids
+}
+
 export function truncateText(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value

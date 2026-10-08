@@ -28,7 +28,8 @@ watch(() => [props.like, props.dislike, props.likeCount, props.dislikeCount], ([
 function updateQo(create = true) {
   y.value = 999999999999
   commentQuoted.emit({
-    username: props.author.username,
+    uid: props.author.uid,
+    name: displayNameOf(props.author),
     pid: props.post!.pid!,
     floor: props.floor,
     content: create ? '' : props.content,
@@ -91,15 +92,15 @@ themeChanged.on((val) => {
 
 <template>
   <div :id="`${props.floor}`" class="relative px-4 flex space-x-2  items-start py-2 comment">
-    <NuxtLink :to="`/member/${author.username}`">
+    <NuxtLink :to="profilePathOf(author)">
       <UAvatar v-if="author && author.avatarUrl" :src="getAvatarUrl(author.avatarUrl, author.headImg)" size="lg" alt="Avatar" />
     </NuxtLink>
     <div class="flex-1 space-y-2 ">
       <div class="flex text-xs mt-1 text-gray-500 flex-wrap gap-2 max-w-[90%]">
         <div class="flex  items-center space-x-1 cursor-pointer hover:text-primary/80 font-semibold">
           <UIcon name="i-carbon-user" />
-          <NuxtLink :to="`/member/${author.username}`">
-            {{ author.username }}
+          <NuxtLink :to="profilePathOf(author)">
+            {{ displayNameOf(author) }}
           </NuxtLink>
           <UBadge v-for="(t, index) in author.titles" :key="index" size="xs" :color="t.style">
             {{ t.title }}

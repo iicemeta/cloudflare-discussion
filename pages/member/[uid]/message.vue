@@ -3,7 +3,7 @@ import { toast } from 'vue-sonner'
 import type { MessageDTO } from '~/types'
 
 const props = defineProps({
-  username: String,
+  uid: String,
 })
 
 const route = useRoute()
@@ -12,7 +12,7 @@ const columns = [{
   key: 'createdAt',
   label: '时间',
 }, {
-  key: 'from.username',
+  key: 'from',
   label: '来自',
 }, {
   key: 'content',
@@ -27,7 +27,7 @@ const state = reactive({
 
 const { data: messageListRes } = await useFetch('/api/member/message', {
   method: 'POST',
-  body: JSON.stringify({ ...state, username: props.username }),
+  body: JSON.stringify({ ...state, uid: props.uid }),
 })
 
 const messageList = computed(() => messageListRes?.value?.messages as any as MessageDTO[])
@@ -36,7 +36,7 @@ const total = computed(() => messageListRes?.value?.total as number)
 async function reload() {
   const res = await $fetch('/api/member/message', {
     method: 'POST',
-    body: JSON.stringify({ ...state, username: props.username }),
+    body: JSON.stringify({ ...state, uid: props.uid }),
   })
   messageListRes.value = res
 }
@@ -67,9 +67,9 @@ watch(() => route.fullPath, reload)
       <template #content-data="{ row }">
         <div class="text-wrap" v-html="row.content" />
       </template>
-      <template #from.username-data="{ row }">
-        <ULink v-if="row.from" class="text-blue-500" :to="`/member/${row.from.username}`">
-          {{ row.from.username }}
+      <template #from-data="{ row }">
+        <ULink v-if="row.from" class="text-blue-500" :to="profilePathOf(row.from)">
+          {{ displayNameOf(row.from) }}
         </ULink>
         <div v-else>
           系统

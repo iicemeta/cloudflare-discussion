@@ -2,7 +2,7 @@
 import type { MessageDTO } from '~/types'
 
 const props = defineProps<{
-  username: string
+  uid: string
 }>()
 const route = useRoute()
 const state = reactive({
@@ -24,7 +24,7 @@ const columns = [{
   key: 'createdAt',
   label: '时间',
 }, {
-  key: 'from.username',
+  key: 'from',
   label: '来自',
 }, {
   key: 'content',
@@ -58,9 +58,9 @@ watch(() => route.fullPath, () => {
     <template #content-data="{ row }">
       <div class="text-wrap" v-html="row.content" />
     </template>
-    <template #from.username-data="{ row }">
-      <ULink v-if="row.from" class="text-blue-500" :to="`/member/${row.from.username}`">
-        {{ row.from.username }}
+    <template #from-data="{ row }">
+      <ULink v-if="row.from" class="text-blue-500" :to="profilePathOf(row.from)">
+        {{ displayNameOf(row.from) }}
       </ULink>
       <div v-else>
         系统
@@ -72,7 +72,7 @@ watch(() => route.fullPath, () => {
       </div>
     </template>
     <template #actions-data="{ row }">
-      <UButton v-if="row.type === 'PRIVATE_MSG'" size="xs" :to="`/member/${props.username}/from/${row.from.username}`">
+      <UButton v-if="row.type === 'PRIVATE_MSG'" size="xs" :to="`/member/${props.uid}/from/${row.from.uid}`">
         回复
       </UButton>
     </template>

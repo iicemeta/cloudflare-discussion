@@ -101,12 +101,12 @@ watch(() => route.query.page, () => {
     <XManageDataState :pending="pending" :error="errorMessage" @retry="reload">
       <UTable :rows="commentList" :columns="columns">
       <template #author.avatarUrl-data="{ row }">
-        <NuxtLink :to="`/member/${row.author.username}`">
+        <NuxtLink :to="`/member/${row.author.uid}`">
           <UAvatar :src="getAvatarUrl(row.author.avatarUrl!, row.author.headImg)" size="lg" alt="Avatar" />
         </NuxtLink>
       </template>
       <template #author.username-data="{ row }">
-        <UButton :to="`/member/${row.author.username}`" color="white">
+        <UButton :to="`/member/${row.author.uid}`" color="white">
           {{ row.author.username }}
         </UButton>
       </template>

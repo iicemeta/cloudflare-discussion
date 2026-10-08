@@ -14,8 +14,8 @@ defineProps<CommentDTO>()
         </div>
 
         <div class="">
-          回复了<NuxtLink class="font-bold" :to="`/member/${author.uid}`">
-            {{ author.username }}
+          回复了<NuxtLink class="font-bold" :to="profilePathOf(author)">
+            {{ displayNameOf(author) }}
           </NuxtLink>创建的主题 >
           <NuxtLink class="font-bold" :to="`/post/${post?.pid}`">
             {{ post?.title }}

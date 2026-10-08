@@ -14,6 +14,37 @@ export function getAvatarUrl(hash: string, url: string | undefined | null) {
   return `${config.public.avatarCdn}${hash}?d=identicon`
 }
 
+interface DisplayNameSource {
+  nickname?: string | null
+  username?: string | null
+  usernameVisible?: boolean | null
+  uid?: string | null
+}
+
+/**
+ * 统一显示名：昵称 → （已公开时）用户名 → 「用户 + uid 后 4 位」。
+ * 用户名默认不公开，所以拿不到 username 时不要回退到它。
+ * 服务端 worker/src/auth.ts 的 displayNameOf 是同一套规则（用于消息正文）。
+ */
+export function displayNameOf(user: DisplayNameSource | null | undefined) {
+  const nickname = String(user?.nickname || '').trim()
+  if (nickname)
+    return nickname
+  if (user?.usernameVisible && user?.username)
+    return String(user.username)
+  const uid = String(user?.uid || '')
+  return uid ? `用户${uid.slice(-4)}` : '匿名用户'
+}
+
+/** 个人主页地址一律用 uid，避免把用户名/学号暴露在 URL 里 */
+export function profilePathOf(user: { uid?: string | null } | null | undefined, sub = '') {
+  const uid = String(user?.uid || '')
+  const base = `/member/${uid}`
+  if (!sub)
+    return base
+  return `${base}/${String(sub).replace(/^\/+/, '')}`
+}
+
 export function dateFormat(date: Date | number | string, pattern: string = 'YYYY-MM-DD HH:mm:ss') {
   return dayjs(date).format(pattern)
 }

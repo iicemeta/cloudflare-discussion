@@ -15,7 +15,7 @@ const globalConfig = useGlobalConfig()
 const { sysConfig } = globalConfig.value
 const canUploadAvatar = computed(() => canUseInternalImageUpload(sysConfig))
 useHead({
-  title: `${userinfo.username}的个人设置`,
+  title: `${displayNameOf(userinfo)}的个人设置`,
 })
 
 type Schema = z.output<typeof saveSettingsRequestSchema>
@@ -27,6 +27,8 @@ const state = reactive({
   css: userinfo.css,
   js: userinfo.js,
   signature: userinfo.signature,
+  nickname: userinfo.nickname ?? '',
+  usernameVisible: Boolean(userinfo.usernameVisible),
 })
 
 const avatarUrl = computed(() => {
@@ -102,11 +104,28 @@ async function uploadAvatar(event: Event) {
       </div>
     </template>
     <UForm :schema="saveSettingsRequestSchema" :state="state" class="space-y-4" @submit="onSubmit">
+      <UFormGroup label="昵称" name="nickname" hint="站点上显示的名字，留空则显示为「用户+随机码」">
+        <UInput v-model="state.nickname" type="text" maxlength="24" placeholder="例如：弦卷心" />
+      </UFormGroup>
       <UFormGroup label="用户名">
-        {{ userinfo.username }}
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span>{{ userinfo.username }}</span>
+            <UBadge size="xs" color="gray" variant="soft">
+              登录账号
+            </UBadge>
+          </div>
+          <span class="text-xs text-gray-400">用于登录，不是站点显示名</span>
+        </div>
+      </UFormGroup>
+      <UFormGroup label="公开我的用户名" name="usernameVisible" hint="默认关闭。开启后其他用户能看到你的用户名">
+        <div class="flex items-center gap-3">
+          <UToggle v-model="state.usernameVisible" />
+          <span class="text-sm text-gray-500">{{ state.usernameVisible ? '已公开' : '不公开（默认）' }}</span>
+        </div>
       </UFormGroup>
       <UFormGroup label="等级">
-        {{ userinfo.level }}级 - (<NuxtLink class="text-blue-500" :to="`/member/${userinfo.username}/point`">
+        {{ userinfo.level }}级 - (<NuxtLink class="text-blue-500" :to="profilePathOf(userinfo, 'point')">
           {{ userinfo.point }}分
         </NuxtLink>)
       </UFormGroup>

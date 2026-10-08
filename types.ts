@@ -39,6 +39,7 @@ export interface PublicOAuthProviderDTO {
 export const regRequestSchema = z
   .object({
     username: z.string(),
+    nickname: z.string().max(24, '昵称最大不超过24个字符').optional(),
     password: z.string().min(6, '密码最少6个字符'),
     repeatPassword: z.string().min(6, '密码最少6个字符'),
     email: z.string().email('请填写正确的邮箱地址'),
@@ -65,6 +66,8 @@ export const saveSettingsRequestSchema = z.object({
   css: z.string().optional().nullish(),
   js: z.string().optional().nullish(),
   signature: z.string().max(300, '最大不超过300个字符').optional().nullish(),
+  nickname: z.string().max(24, '昵称最大不超过24个字符').optional().nullish(),
+  usernameVisible: z.boolean().optional(),
 })
 
 export const loginRequestSchema = z.object({
@@ -102,8 +105,13 @@ export interface JwtPayload {
 export interface UserDTO {
   createdAt: string
   uid: string
-  username: string
-  email: string
+  /** 登录用户名；默认不公开，仅在本人/管理员请求或用户主动公开时下发 */
+  username?: string
+  /** 对外显示名，优先级：昵称 → （已公开）用户名 → 「用户 + uid 后 4 位」 */
+  nickname: string | null
+  /** 是否公开自己的用户名 */
+  usernameVisible: boolean
+  email?: string
   avatarUrl: string | null
   headImg?: string
   point: number

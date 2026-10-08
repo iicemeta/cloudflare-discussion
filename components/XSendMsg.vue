@@ -3,13 +3,13 @@ import { toast } from 'vue-sonner'
 import type { SysConfigDTO } from '~/types'
 
 const props = defineProps<{
-  toUsername: string
+  toUid: string
 }>()
 const emit = defineEmits(['sendMsgSuccess'])
 
 const state = reactive({
   content: '',
-  toUser: props.toUsername,
+  toUser: props.toUid,
 })
 const pending = ref(false)
 const global = useGlobalConfig()
@@ -43,7 +43,6 @@ async function doSendMsg(token?: string) {
     toast.success(message)
     state.content = ''
     emit('sendMsgSuccess')
-    // await navigateTo(`/member/${props.toUsername}`)
   }
   else {
     toast.error(message)
@@ -53,7 +52,7 @@ async function doSendMsg(token?: string) {
 
 <template>
   <div class="flex flex-col gap-2">
-    <UTextarea v-model="state.content" color="white" variant="outline" :rows="5" autoresize padded :placeholder="`发送私信给${props.toUsername}`" />
+    <UTextarea v-model="state.content" color="white" variant="outline" :rows="5" autoresize padded :placeholder="`发送私信给${displayNameOf({ uid: props.toUid })}`" />
     <XTurnstile
       v-if="sysconfig.turnstile?.enable"
       ref="turnstileRef"

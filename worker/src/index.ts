@@ -6,12 +6,12 @@ import { json, jsonError, readBody, nowIso, getPage, getSize, randomId, sha256He
 import { hashPassword } from './auth'
 import { queryPointSum } from './post'
 import { all, first, run, queryCount } from './db'
-import { getCurrentUser, isAdmin, buildCookie, expireCookie, getTokenKey, mapCurrentUser, sanitizeUser, ensureUserSecretKey } from './auth'
+import { getCurrentUser, isAdmin, buildCookie, expireCookie, getTokenKey, mapCurrentUser, sanitizeUser, ensureUserSecretKey, publicUsernameFields } from './auth'
 import { defaultSysConfig, getSysConfig, getPublicSysConfig, saveSysConfig } from './config'
 import { buildTagListResponse, buildMemberHotResponse, mapTag } from './tag'
 import { buildPostListResponse, handlePostDetail, buildPostSummaries, syncPostPoint, getPostListInputFromUrl } from './post'
 import { handleCommentReaction, handleCommentDetail, buildCommentWithPost, buildCommentsWithPosts } from './comment'
-import { handleMemberDetail, buildProfile, buildUserSummary, getUserTitles, getUserTitlesMap, getUsernameByUid } from './member'
+import { handleMemberDetail, buildProfile, buildUserSummary, getUserTitles, getUserTitlesMap } from './member'
 import { handleSendPrivateMessage, handlePrivateMessageList, handlePrivateMessageInbox, handleMemberMessages, handleReadMessages } from './message'
 import { handleImageAsset, handleImageUpload } from './image'
 import { handleTelegramWebhook } from './telegram'
@@ -519,13 +519,14 @@ async function handleRegister(request: Request, env: Env) {
   const secretKey = randomId('')
   const role = userCount === 0 ? 'ADMIN' : 'USER'
   const now = nowIso()
+  const nickname = normalizeNickname(body.nickname)
 
   await run(env, `
     INSERT INTO users (
-      uid, created_at, updated_at, username, password_hash, email, avatar_url,
+      uid, created_at, updated_at, username, password_hash, email, avatar_url, nickname,
       point, post_count, comment_count, role, level, status, invited_by_id, secret_key
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'NORMAL', ?, ?)
-  `, [uid, now, now, username, passwordHash, email, avatarUrl, point, role, level, inviteUserId, secretKey])
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'NORMAL', ?, ?)
+  `, [uid, now, now, username, passwordHash, email, avatarUrl, nickname, point, role, level, inviteUserId, secretKey])
 
   if (inviteRow) {
     await run(env, 'UPDATE invite_codes SET to_uid = ? WHERE id = ?', [uid, inviteRow.id])
@@ -571,14 +572,16 @@ async function handleSaveSettings(request: Request, env: Env, currentUser: Curre
   const css = normalizeNullableStringWrapper(body.css)
   const js = normalizeNullableStringWrapper(body.js)
   const signature = normalizeNullableStringWrapper(body.signature)
+  const nickname = normalizeNickname(body.nickname)
+  const usernameVisible = body.usernameVisible ? 1 : 0
 
   if (body.password) {
     const passwordHash = await hashPassword(String(body.password))
     await run(env, `
       UPDATE users
-      SET email = ?, avatar_url = ?, head_img = ?, css = ?, js = ?, signature = ?, password_hash = ?, updated_at = ?
+      SET email = ?, avatar_url = ?, head_img = ?, css = ?, js = ?, signature = ?, nickname = ?, username_visible = ?, password_hash = ?, updated_at = ?
       WHERE uid = ?
-    `, [email, avatarUrl, headImg, css, js, signature, passwordHash, now, currentUser.uid])
+    `, [email, avatarUrl, headImg, css, js, signature, nickname, usernameVisible, passwordHash, now, currentUser.uid])
 
     const headers = new Headers()
     headers.append('Set-Cookie', expireCookie(getTokenKey(env), env))
@@ -587,9 +590,9 @@ async function handleSaveSettings(request: Request, env: Env, currentUser: Curre
 
   await run(env, `
     UPDATE users
-    SET email = ?, avatar_url = ?, head_img = ?, css = ?, js = ?, signature = ?, updated_at = ?
+    SET email = ?, avatar_url = ?, head_img = ?, css = ?, js = ?, signature = ?, nickname = ?, username_visible = ?, updated_at = ?
     WHERE uid = ?
-  `, [email, avatarUrl, headImg, css, js, signature, now, currentUser.uid])
+  `, [email, avatarUrl, headImg, css, js, signature, nickname, usernameVisible, now, currentUser.uid])
 
   return json({ success: true })
 }
@@ -615,7 +618,7 @@ async function handleCreateInviteCode(env: Env, currentUser: CurrentUser) {
 
 async function handleInviteCodeList(env: Env, currentUser: CurrentUser) {
   const rows = await all(env, `
-    SELECT ic.*, u.username AS to_username, u.uid AS to_uid_value
+    SELECT ic.*, u.username AS to_username, u.nickname AS to_nickname, u.username_visible AS to_username_visible, u.uid AS to_uid_value
     FROM invite_codes ic
     LEFT JOIN users u ON u.uid = ic.to_uid
     WHERE ic.from_uid = ?
@@ -631,7 +634,9 @@ async function handleInviteCodeList(env: Env, currentUser: CurrentUser) {
       fromUid: row.from_uid,
       toUid: row.to_uid,
       content: row.content,
-      toUser: row.to_uid ? { uid: row.to_uid_value, username: row.to_username } : null,
+      toUser: row.to_uid
+        ? { uid: row.to_uid_value, ...publicUsernameFields(row, 'to_') }
+        : null,
     })),
     total: rows.length,
   })
@@ -862,8 +867,9 @@ async function handleCommentNew(request: Request, env: Env, currentUser: Current
 
   const maxFloor = await first(env, 'SELECT MAX(floor) AS floor FROM comments WHERE pid = ?', [pid])
   const cid = randomId('c')
-  const postAuthorUsername = await getUsernameByUid(env, post.uid)
-  const mentioned = extractMentionsWrapper(content).filter(name => name !== `@${postAuthorUsername}`)
+  // 提及按 `[@昵称](/member/<uid>)` 里的 uid 定位，避免依赖用户名/昵称
+  const mentionUids = extractMentionUidsWrapper(content).filter(uid => uid !== post.uid)
+  const mentioned = extractMentionsWrapper(content)
 
   await run(env, `
     INSERT INTO comments (cid, created_at, updated_at, uid, pid, mentioned, content, floor)
@@ -897,8 +903,8 @@ async function handleCommentNew(request: Request, env: Env, currentUser: Current
     )
   }
 
-  for (const mention of mentioned) {
-    const target = await first(env, 'SELECT uid, tg_chat_id FROM users WHERE username = ?', [mention.slice(1)])
+  for (const mentionUid of mentionUids) {
+    const target = await first(env, 'SELECT uid, tg_chat_id FROM users WHERE uid = ?', [mentionUid])
     if (target) {
       await run(env, `
         INSERT INTO messages (created_at, updated_at, read, from_uid, to_uid, content, type, relation_id)
@@ -918,10 +924,10 @@ async function handleCommentNew(request: Request, env: Env, currentUser: Current
 
 async function handleMemberPost(request: Request, env: Env, currentUser: CurrentUser | null) {
   const body = await readBody(request)
-  const username = String(body.username || '')
+  const uid = String(body.uid || body.username || '').trim()
   const page = getPage(body.page)
   const size = getSize(body.size, 20)
-  const user = await first(env, 'SELECT * FROM users WHERE username = ?', [username])
+  const user = await first(env, 'SELECT * FROM users WHERE uid = ? OR username = ? LIMIT 1', [uid, uid])
   if (!user) {
     return json({ success: false, message: '用户不存在' })
   }
@@ -940,10 +946,10 @@ async function handleMemberPost(request: Request, env: Env, currentUser: Current
 
 async function handleMemberComment(request: Request, env: Env, currentUser: CurrentUser | null) {
   const body = await readBody(request)
-  const username = String(body.username || '')
+  const uid = String(body.uid || body.username || '').trim()
   const page = getPage(body.page)
   const size = getSize(body.size, 20)
-  const user = await first(env, 'SELECT * FROM users WHERE username = ?', [username])
+  const user = await first(env, 'SELECT * FROM users WHERE uid = ? OR username = ? LIMIT 1', [uid, uid])
   if (!user) {
     return json({ success: false, message: '用户不存在' })
   }
@@ -954,6 +960,8 @@ async function handleMemberComment(request: Request, env: Env, currentUser: Curr
       u.id AS author_id,
       u.uid AS author_uid,
       u.username AS author_username,
+      u.nickname AS author_nickname,
+      u.username_visible AS author_username_visible,
       u.avatar_url AS author_avatar_url,
       u.head_img AS author_head_img,
       u.role AS author_role,
@@ -980,10 +988,10 @@ async function handleMemberComment(request: Request, env: Env, currentUser: Curr
 
 async function handleMemberFav(request: Request, env: Env, currentUser: CurrentUser | null) {
   const body = await readBody(request)
-  const username = String(body.username || '')
+  const uid = String(body.uid || body.username || '').trim()
   const page = getPage(body.page)
   const size = getSize(body.size, 20)
-  const user = await first(env, 'SELECT * FROM users WHERE username = ?', [username])
+  const user = await first(env, 'SELECT * FROM users WHERE uid = ? OR username = ? LIMIT 1', [uid, uid])
   if (!user) {
     return json({ success: false, message: '用户不存在' })
   }
@@ -994,6 +1002,8 @@ async function handleMemberFav(request: Request, env: Env, currentUser: CurrentU
       au.id AS author_id,
       au.uid AS author_uid,
       au.username AS author_username,
+      au.nickname AS author_nickname,
+      au.username_visible AS author_username_visible,
       au.avatar_url AS author_avatar_url,
       au.head_img AS author_head_img,
       au.role AS author_role,
@@ -1005,6 +1015,8 @@ async function handleMemberFav(request: Request, env: Env, currentUser: CurrentU
       t.hot AS tag_hot,
       lu.uid AS last_comment_user_uid,
       lu.username AS last_comment_user_username,
+      lu.nickname AS last_comment_user_nickname,
+      lu.username_visible AS last_comment_user_username_visible,
       p.reply_count AS comments_count,
       p.support_count,
       1 AS fav_count
@@ -1033,10 +1045,10 @@ async function handleMemberPoint(request: Request, env: Env, currentUser: Curren
   }
 
   const body = await readBody(request)
-  const username = String(body.username || '')
+  const uid = String(body.uid || body.username || '').trim()
   const page = getPage(body.page)
   const size = getSize(body.size, 20)
-  const user = await first(env, 'SELECT * FROM users WHERE username = ?', [username])
+  const user = await first(env, 'SELECT * FROM users WHERE uid = ? OR username = ? LIMIT 1', [uid, uid])
   if (!user) {
     return json({ success: false, message: '用户不存在' })
   }
@@ -1352,6 +1364,8 @@ async function handleManageCommentList(request: Request, env: Env, currentUser: 
       c.*,
       u.uid AS author_uid,
       u.username AS author_username,
+      u.nickname AS author_nickname,
+      u.username_visible AS author_username_visible,
       u.avatar_url AS author_avatar_url,
       u.head_img AS author_head_img,
       p.title AS post_title
@@ -1610,6 +1624,16 @@ function normalizeNullableStringWrapper(value: any) {
   return text ? text : null
 }
 
+/** 昵称：压缩空白、去掉控制字符、最多 24 个字符；空则存 NULL（回落到「用户xxxx」） */
+function normalizeNickname(value: any) {
+  const text = String(value ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+  return text || null
+}
+
 function formatDatePidWrapper(pattern: string) {
   const now = new Date()
   const map: Record<string, string> = {
@@ -1627,6 +1651,18 @@ function formatDatePidWrapper(pattern: string) {
 function extractMentionsWrapper(text: string) {
   const regex = /\[@([^\]]+)\]/g
   return (text.match(regex) || []).map(match => match.slice(1, -1))
+}
+
+function extractMentionUidsWrapper(text: string) {
+  const regex = /\[@[^\]]*\]\(\/member\/([^)\s?#]+)/g
+  const uids: string[] = []
+  for (const match of text.matchAll(regex)) {
+    const uid = String(match[1] || '').trim()
+    if (uid && !uids.includes(uid)) {
+      uids.push(uid)
+    }
+  }
+  return uids
 }
 
 async function verifyPasswordWrapper(password: string, stored: string) {

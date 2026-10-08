@@ -55,6 +55,8 @@ export interface CurrentUser {
   createdAt: string | null
   updatedAt: string | null
   username: string
+  nickname: string | null
+  usernameVisible: boolean
   role: 'ADMIN' | 'USER'
   status: 'NORMAL' | 'BANNED'
   point: number

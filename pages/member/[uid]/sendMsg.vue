@@ -3,15 +3,15 @@ import type { UserDTO } from '~/types'
 
 const route = useRoute()
 const currentUser = useState<UserDTO>('userinfo', () => ({} as UserDTO))
-const username = route.params.username as string
+const uid = route.params.uid as string
 async function sendMsgSuccess() {
-  const owner = currentUser.value?.username || username
-  await navigateTo(`/member/${owner}/from/${username}`)
+  const owner = currentUser.value?.uid || uid
+  await navigateTo(`/member/${owner}/from/${uid}`)
 }
 </script>
 
 <template>
-  <XSendMsg :to-username="username" @send-msg-success="sendMsgSuccess" />
+  <XSendMsg :to-uid="uid" @send-msg-success="sendMsgSuccess" />
 </template>
 
 <style scoped>

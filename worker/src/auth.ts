@@ -133,6 +133,8 @@ export function mapCurrentUser(row: any): CurrentUser {
     createdAt: row.created_at ?? null,
     updatedAt: row.updated_at ?? null,
     username: row.username,
+    nickname: row.nickname ?? null,
+    usernameVisible: Number(row.username_visible) === 1,
     role: row.role,
     status: row.status,
     point: Number(row.point ?? 0),
@@ -153,14 +155,46 @@ export function mapCurrentUser(row: any): CurrentUser {
   }
 }
 
+/**
+ * 从带前缀别名的查询结果里取出「对外可见」的用户名字段。
+ * 用户名默认不公开：只有用户自己开启 username_visible 后才下发 username。
+ * 调用方需要在 SQL 里多选 `${prefix}nickname` 与 `${prefix}username_visible` 两列。
+ */
+export function publicUsernameFields(row: any, prefix = '') {
+  const nickname = String(row[`${prefix}nickname`] ?? '').trim()
+  const usernameVisible = Number(row[`${prefix}username_visible`]) === 1
+  return {
+    nickname: nickname || null,
+    usernameVisible,
+    ...(usernameVisible ? { username: String(row[`${prefix}username`] ?? '') } : {}),
+  }
+}
+
+/**
+ * 统一的对内显示名：昵称 → （已公开时）用户名 → 「用户 + uid 后 4 位」。
+ * 前端 utils/index.ts 里的 displayNameOf 是同一套规则，用于渲染页面。
+ */
+export function displayNameOf(user: { nickname?: string | null, username?: string | null, usernameVisible?: boolean, uid?: string | null } | null | undefined) {
+  const nickname = String(user?.nickname || '').trim()
+  if (nickname) {
+    return nickname
+  }
+  if (user?.usernameVisible && user?.username) {
+    return String(user.username)
+  }
+  const uid = String(user?.uid || '')
+  return uid ? `用户${uid.slice(-4)}` : '匿名用户'
+}
+
 export function sanitizeUser(user: CurrentUser, includePrivateFields = false) {
+  const usernameVisible = Boolean(user.usernameVisible)
   const payload: Record<string, any> = {
     id: user.id,
     uid: user.uid,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    username: user.username,
-    email: user.email,
+    nickname: user.nickname || null,
+    usernameVisible,
     avatarUrl: user.avatarUrl,
     headImg: user.headImg,
     point: user.point,
@@ -177,7 +211,13 @@ export function sanitizeUser(user: CurrentUser, includePrivateFields = false) {
     lastActive: user.lastActive,
   }
 
+  // 用户名与邮箱都属于隐私字段：本人/管理员可见，或用户主动公开用户名
+  if (usernameVisible || includePrivateFields) {
+    payload.username = user.username
+  }
+
   if (includePrivateFields) {
+    payload.email = user.email
     payload.secretKey = user.secretKey
     payload.tgChatID = user.tgChatID
   }

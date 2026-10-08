@@ -270,12 +270,12 @@ async function makePointAction() {
         :ui="{ wrapper: 'w-[300px]', th: { base: 'text-nowrap' } }"
       >
       <template #avatarUrl-data="{ row }">
-        <NuxtLink :to="`/member/${row.username}`">
+        <NuxtLink :to="`/member/${row.uid}`">
           <UAvatar :src="getAvatarUrl(row.avatarUrl!, row.headImg)" size="lg" alt="Avatar" />
         </NuxtLink>
       </template>
       <template #username-data="{ row }">
-        <UButton :to="`/member/${row.username}`" color="white">
+        <UButton :to="`/member/${row.uid}`" color="white">
           {{ row.username }}
         </UButton>
       </template>

@@ -1,7 +1,7 @@
 import type { Env, CurrentUser, UserTitleSummary } from './types'
 import { all, first, queryCount } from './db'
 import { json, parseJsonArray } from './utils'
-import { mapCurrentUser, sanitizeUser, ensureUserSecretKey } from './auth'
+import { mapCurrentUser, sanitizeUser, ensureUserSecretKey, isAdmin } from './auth'
 
 export async function getUserTitlesMap(env: Env, userIds: number[]) {
   const ids = [...new Set(userIds.filter(userId => Number.isFinite(userId) && userId > 0).map(userId => Math.floor(userId)))]
@@ -47,11 +47,6 @@ export async function getUserTitles(env: Env, userId: number) {
   return titlesByUserId.get(Number(userId)) || []
 }
 
-export async function getUsernameByUid(env: Env, uid: string) {
-  const row = await first(env, 'SELECT username FROM users WHERE uid = ?', [uid])
-  return row?.username || ''
-}
-
 export async function buildUserSummary(env: Env, row: any, includePrivateFields = false) {
   const user = mapCurrentUser(row)
   const receiveCount = await queryCount(env, `SELECT COUNT(*) AS count FROM messages WHERE to_uid = ? AND (type IS NULL OR type != 'PRIVATE_MSG')`, [row.uid])
@@ -89,22 +84,34 @@ export async function buildProfile(env: Env, currentUser: CurrentUser) {
   }
 }
 
-export async function handleMemberDetail(env: Env, currentUser: CurrentUser | null, username: string) {
-  const row = await first(env, 'SELECT * FROM users WHERE username = ?', [username])
+export async function handleMemberDetail(env: Env, currentUser: CurrentUser | null, uidOrUsername: string) {
+  const key = String(uidOrUsername || '').trim()
+  if (!key) {
+    return json({})
+  }
+
+  // 个人主页以 uid 作为标识（避免把用户名/学号暴露在 URL 里），同时兼容旧的用户名链接
+  let row = await first(env, 'SELECT * FROM users WHERE uid = ?', [key])
+  if (!row) {
+    row = await first(env, 'SELECT * FROM users WHERE username = ?', [key])
+  }
   if (!row) {
     return json({})
   }
 
-  if (currentUser?.uid === row.uid) {
+  const isSelf = currentUser?.uid === row.uid
+  const canSeePrivate = isSelf || isAdmin(currentUser)
+
+  if (isSelf) {
     await ensureUserSecretKey(env, row)
   }
 
-  const user = await buildUserSummary(env, row, currentUser?.uid === row.uid)
+  const user = await buildUserSummary(env, row, canSeePrivate)
   const privateMsgCount = await queryCount(env, 'SELECT COUNT(*) AS count FROM messages WHERE type = ? AND to_uid = ?', ['PRIVATE_MSG', row.uid])
   let unreadMessageCount = 0
   let unreadPrivateMessageCount = 0
 
-  if (currentUser?.uid === row.uid) {
+  if (isSelf) {
     unreadMessageCount = await queryCount(env, `SELECT COUNT(*) AS count FROM messages WHERE to_uid = ? AND read = 0 AND (type IS NULL OR type != 'PRIVATE_MSG')`, [row.uid])
     unreadPrivateMessageCount = await queryCount(env, `SELECT COUNT(*) AS count FROM messages WHERE to_uid = ? AND read = 0 AND type = 'PRIVATE_MSG'`, [row.uid])
   }

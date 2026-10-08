@@ -131,7 +131,7 @@ watch(() => route.query.page, () => {
     <XManageDataState :pending="pending" :error="errorMessage" @retry="reload">
       <UTable :rows="tagList" :columns="columns">
       <template #avatarUrl-data="{ row }">
-        <NuxtLink :to="`/member/${row.username}`">
+        <NuxtLink :to="`/member/${row.uid}`">
           <UAvatar :src="getAvatarUrl(row.avatarUrl!, row.headImg)" size="lg" alt="Avatar" />
         </NuxtLink>
       </template>
