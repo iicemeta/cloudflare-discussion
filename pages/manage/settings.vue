@@ -131,7 +131,16 @@ function applyOAuthTypeChange(provider: OAuthProviderDTO) {
   }
 }
 
-const oauthCallbackBase = computed(() => normalizeWebsiteUrl(state.websiteUrl) || 'https://你的域名')
+const currentOrigin = ref('')
+
+onMounted(() => {
+  if (import.meta.client) {
+    currentOrigin.value = window.location.origin
+  }
+})
+
+/** 回调地址优先取管理员当前访问的域名（地址栏 origin），取不到再退回「论坛地址」配置 */
+const oauthCallbackBase = computed(() => currentOrigin.value || normalizeWebsiteUrl(state.websiteUrl) || 'https://你的域名')
 
 function oauthCallbackUrl(provider: OAuthProviderDTO) {
   return `${oauthCallbackBase.value}/api/oauth/callback?provider=${provider.key || 'provider'}`
@@ -780,11 +789,18 @@ async function copyWebhook() {
                     <span class="text-sm text-gray-500">{{ provider.autoRegister ? '是' : '否' }}</span>
                   </div>
                 </UFormGroup>
-                <UButton class="mb-1" size="xs" color="gray" variant="soft" @click="copyOAuthCallbackUrl(provider)">
-                  复制回调地址
-                </UButton>
-                <span class="mb-1 text-xs text-gray-400 break-all">{{ oauthCallbackUrl(provider) }}</span>
+                <UFormGroup label="回调地址（填到服务商后台）" class="min-w-[380px] flex-1">
+                  <div class="flex items-center gap-2">
+                    <UInput :model-value="oauthCallbackUrl(provider)" readonly class="flex-1" autocomplete="off" />
+                    <UButton size="xs" color="gray" variant="soft" @click="copyOAuthCallbackUrl(provider)">
+                      复制
+                    </UButton>
+                  </div>
+                </UFormGroup>
               </div>
+              <p class="text-xs text-gray-400">
+                回调地址按你当前访问后台的域名「{{ oauthCallbackBase }}」生成，请用站点的正式域名打开后台后再复制。
+              </p>
             </div>
 
             <UButtonGroup size="sm" orientation="horizontal" class="w-fit">
