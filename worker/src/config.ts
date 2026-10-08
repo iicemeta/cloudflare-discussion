@@ -1,6 +1,7 @@
 import type { Env } from './types'
 import { clone, deepMerge, normalizeEmailConfig } from './utils'
 import { first, run } from './db'
+import { getPublicOAuthConfig, normalizeOAuthConfig } from './oauth'
 
 export const defaultSysConfig = {
   websiteName: '极简论坛',
@@ -44,6 +45,9 @@ export const defaultSysConfig = {
     tgBotName: '',
     tgSecret: '',
   },
+  oauth2: {
+    providers: [] as any[],
+  },
   upload: {
     imgStrategy: 'r2',
     attachmentStrategy: 'r2',
@@ -68,6 +72,8 @@ export function normalizeSysConfig(config: any) {
   }
 
   normalized.email = normalizeEmailConfig(normalized.email)
+
+  normalized.oauth2 = normalizeOAuthConfig(normalized.oauth2)
 
   normalized.upload = {
     ...(normalized.upload && typeof normalized.upload === 'object' ? normalized.upload : {}),
@@ -98,6 +104,8 @@ export function getPublicSysConfig(config: any) {
   }
 
   publicConfig.email = null
+
+  publicConfig.oauth2 = getPublicOAuthConfig(publicConfig.oauth2)
 
   if (publicConfig.notify && typeof publicConfig.notify === 'object') {
     publicConfig.notify = {

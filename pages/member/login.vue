@@ -3,6 +3,7 @@ import { toast } from 'vue-sonner'
 import type { z } from 'zod'
 import type { FormSubmitEvent } from '#ui/types'
 import { type SysConfigDTO, loginRequestSchema } from '~/types'
+import type { PublicOAuthProviderDTO } from '~/types'
 
 useHead({
   title: `登录`,
@@ -19,6 +20,42 @@ const route = useRoute()
 const global = useGlobalConfig()
 const sysconfig = global.value?.sysConfig as SysConfigDTO
 const turnstileRef = ref<{ execute: () => Promise<string> } | null>(null)
+
+const oauthProviders = computed(() => (global.value?.sysConfig?.oauth2?.providers ?? []) as PublicOAuthProviderDTO[])
+
+function oauthProviderIcon(type: string) {
+  if (type === 'github')
+    return 'i-carbon-logo-github'
+  if (type === 'google')
+    return 'i-carbon-logo-google'
+  if (type === 'gitee')
+    return 'i-carbon-user-avatar'
+  return 'i-carbon-login'
+}
+
+function safeRedirectTarget() {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+  return redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+}
+
+function oauthLogin(provider: PublicOAuthProviderDTO) {
+  const params = new URLSearchParams({
+    provider: provider.key,
+    redirect: safeRedirectTarget(),
+  })
+  location.href = `/api/oauth/start?${params.toString()}`
+}
+
+onMounted(() => {
+  const oauthError = typeof route.query.oauth_error === 'string' ? route.query.oauth_error : ''
+  if (!oauthError) {
+    return
+  }
+  toast.error(`第三方登录失败：${oauthError}`)
+  const query = { ...route.query }
+  delete query.oauth_error
+  navigateTo({ path: route.path, query }, { replace: true })
+})
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   pending.value = true
@@ -91,6 +128,27 @@ async function login(data: Schema, token: string = '') {
           </NuxtLink>
         </div>
       </UForm>
+
+      <div v-if="oauthProviders.length" class="mt-4">
+        <div class="flex items-center gap-2 my-3">
+          <div class="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+          <span class="text-xs text-gray-400">或使用第三方账号登录</span>
+          <div class="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+        </div>
+        <div class="flex flex-col gap-2">
+          <UButton
+            v-for="provider in oauthProviders"
+            :key="provider.key"
+            block
+            color="gray"
+            variant="soft"
+            :icon="oauthProviderIcon(provider.type)"
+            @click="oauthLogin(provider)"
+          >
+            {{ provider.name }}
+          </UButton>
+        </div>
+      </div>
     </div>
   </UCard>
 </template>

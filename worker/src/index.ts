@@ -16,6 +16,7 @@ import { handleSendPrivateMessage, handlePrivateMessageList, handlePrivateMessag
 import { handleImageAsset, handleImageUpload } from './image'
 import { handleTelegramWebhook } from './telegram'
 import { verifyTurnstile } from './turnstile'
+import { handleOAuthStart, handleOAuthCallback } from './oauth'
 import { isEmailSendRateLimited, saveEmailCodeRecord, sendResendEmail, buildRegisterEmailHtml, buildResetPasswordEmailHtml } from './email'
 import { buildManageComment } from './manage'
 import { APP_VERSION } from '../../version'
@@ -30,6 +31,8 @@ const PUBLIC_API_PATHS = new Set([
   '/api/member/sendEmail',
   '/api/member/sendForgotPasswordEmail',
   '/api/member/resetPwd',
+  '/api/oauth/start',
+  '/api/oauth/callback',
   '/api/tg',
 ])
 const PUBLIC_GET_API_PATHS = new Set([
@@ -119,6 +122,14 @@ async function handleApi(request: Request, env: Env, url: URL, ctx: ExecutionCon
 
   if (pathname === '/api/member/login' && method === 'POST') {
     return handleLogin(request, env)
+  }
+
+  if (pathname === '/api/oauth/start' && method === 'GET') {
+    return handleOAuthStart(request, env, url)
+  }
+
+  if (pathname === '/api/oauth/callback' && method === 'GET') {
+    return handleOAuthCallback(request, env, url)
   }
 
   if (pathname === '/api/member/reg' && method === 'POST') {

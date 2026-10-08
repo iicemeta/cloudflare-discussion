@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { toast } from 'vue-sonner'
+import type { OAuth2ConfigDTO, OAuthProviderDTO, OAuthProviderType } from '~/types'
 
 useHead({
   title: '系统设置',
@@ -7,6 +8,139 @@ useHead({
 definePageMeta({
   layout: 'backend',
 })
+
+const OAUTH_PROVIDER_TYPES: OAuthProviderType[] = ['github', 'google', 'gitee', 'generic']
+
+const oauthTypeOptions = [
+  { value: 'github', label: 'GitHub' },
+  { value: 'google', label: 'Google' },
+  { value: 'gitee', label: 'Gitee' },
+  { value: 'generic', label: '自定义 OAuth2' },
+]
+
+/** 与服务端 worker/src/oauth.ts 的预设保持一致，用于新增服务商时自动填充 */
+const oauthProviderPresets: Record<OAuthProviderType, Omit<OAuthProviderDTO, 'key' | 'type' | 'enabled' | 'clientId' | 'clientSecret' | 'autoRegister'>> = {
+  github: {
+    name: 'GitHub',
+    authorizeUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    userInfoUrl: 'https://api.github.com/user',
+    scope: 'read:user user:email',
+    idField: 'id',
+    emailField: 'email',
+    nameField: 'name',
+    avatarField: 'avatar_url',
+  },
+  google: {
+    name: 'Google',
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
+    scope: 'openid email profile',
+    idField: 'sub',
+    emailField: 'email',
+    nameField: 'name',
+    avatarField: 'picture',
+  },
+  gitee: {
+    name: 'Gitee',
+    authorizeUrl: 'https://gitee.com/oauth/authorize',
+    tokenUrl: 'https://gitee.com/oauth/token',
+    userInfoUrl: 'https://gitee.com/api/v5/user',
+    scope: 'user_info',
+    idField: 'id',
+    emailField: 'email',
+    nameField: 'name',
+    avatarField: 'avatar_url',
+  },
+  generic: {
+    name: '自定义登录',
+    authorizeUrl: '',
+    tokenUrl: '',
+    userInfoUrl: '',
+    scope: '',
+    idField: 'id',
+    emailField: 'email',
+    nameField: 'name',
+    avatarField: 'avatar_url',
+  },
+}
+
+function sanitizeProviderKey(key: string, fallback: string) {
+  const cleaned = String(key || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '')
+  return cleaned || fallback
+}
+
+function defaultProviderKey(type: OAuthProviderType) {
+  return type === 'generic' ? 'oauth' : type
+}
+
+function createOAuthProvider(type: OAuthProviderType = 'github', index = 0): OAuthProviderDTO {
+  const preset = oauthProviderPresets[type] ?? oauthProviderPresets.generic
+  const baseKey = defaultProviderKey(type)
+  return {
+    key: index === 0 ? baseKey : `${baseKey}${index + 1}`,
+    type,
+    enabled: false,
+    clientId: '',
+    clientSecret: '',
+    autoRegister: true,
+    ...preset,
+  }
+}
+
+function normalizeProviderList(raw: any): OAuthProviderDTO[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  return raw.map((item, index) => {
+    const source = item && typeof item === 'object' ? item : {}
+    const type: OAuthProviderType = OAUTH_PROVIDER_TYPES.includes(source.type) ? source.type : 'generic'
+    const base = createOAuthProvider(type, index)
+    return {
+      ...base,
+      ...source,
+      type,
+      key: sanitizeProviderKey(source.key, base.key),
+      autoRegister: source.autoRegister === undefined ? true : Boolean(source.autoRegister),
+    }
+  })
+}
+
+function addOAuthProvider(type: OAuthProviderType) {
+  state.oauth2.providers.push(createOAuthProvider(type, state.oauth2.providers.length))
+}
+
+function removeOAuthProvider(index: number) {
+  state.oauth2.providers.splice(index, 1)
+}
+
+function applyOAuthTypeChange(provider: OAuthProviderDTO) {
+  const preset = oauthProviderPresets[provider.type] ?? oauthProviderPresets.generic
+  const previousNames = Object.values(oauthProviderPresets).map(item => item.name)
+  provider.authorizeUrl = preset.authorizeUrl
+  provider.tokenUrl = preset.tokenUrl
+  provider.userInfoUrl = preset.userInfoUrl
+  provider.scope = preset.scope
+  provider.idField = preset.idField
+  provider.emailField = preset.emailField
+  provider.nameField = preset.nameField
+  provider.avatarField = preset.avatarField
+  if (!provider.name || previousNames.includes(provider.name)) {
+    provider.name = preset.name
+  }
+}
+
+const oauthCallbackBase = computed(() => normalizeWebsiteUrl(state.websiteUrl) || 'https://你的域名')
+
+function oauthCallbackUrl(provider: OAuthProviderDTO) {
+  return `${oauthCallbackBase.value}/api/oauth/callback?provider=${provider.key || 'provider'}`
+}
+
+function copyOAuthCallbackUrl(provider: OAuthProviderDTO) {
+  copy(oauthCallbackUrl(provider))
+  toast.success('已复制回调地址')
+}
 
 function createDefaultState() {
   return {
@@ -51,6 +185,9 @@ function createDefaultState() {
       tgBotName: '',
       tgSecret: '',
     },
+    oauth2: {
+      providers: [] as OAuthProviderDTO[],
+    } as OAuth2ConfigDTO,
     upload: {
       imgStrategy: 'r2',
       attachmentStrategy: 'r2',
@@ -78,6 +215,9 @@ function applyConfig(config: Record<string, any> | null | undefined) {
   state.notify = {
     ...defaults.notify,
     ...(config?.notify ?? {}),
+  }
+  state.oauth2 = {
+    providers: normalizeProviderList(config?.oauth2?.providers),
   }
   state.upload = {
     ...defaults.upload,
@@ -149,6 +289,37 @@ function ensureTelegramSecret() {
   }
 }
 
+function normalizeOAuthProviders() {
+  const usedKeys = new Set<string>()
+  state.oauth2.providers.forEach((provider, index) => {
+    let key = sanitizeProviderKey(provider.key, `provider${index + 1}`)
+    while (usedKeys.has(key)) {
+      key = `${key}_${index + 1}`
+    }
+    usedKeys.add(key)
+    provider.key = key
+  })
+}
+
+function validateOAuthProviders() {
+  normalizeOAuthProviders()
+  for (const provider of state.oauth2.providers) {
+    if (!provider.enabled) {
+      continue
+    }
+    const label = provider.name || provider.key
+    if (!provider.clientId || !provider.clientSecret) {
+      toast.error(`OAuth2「${label}」需要填写 Client ID 和 Client Secret`)
+      return false
+    }
+    if (!provider.authorizeUrl || !provider.tokenUrl || !provider.userInfoUrl) {
+      toast.error(`OAuth2「${label}」需要填写授权、令牌与用户信息地址`)
+      return false
+    }
+  }
+  return true
+}
+
 async function persistSettings(options: { reload?: boolean, successMessage?: string } = {}) {
   const { reload = true, successMessage = '保存成功' } = options
   if (state.turnstile.enable && (!state.turnstile.siteKey || !state.turnstile.secretKey)) {
@@ -158,6 +329,10 @@ async function persistSettings(options: { reload?: boolean, successMessage?: str
 
   if (state.regWithEmailCodeVerify && (!state.email.apiKey || !state.email.from)) {
     toast.error('启用了邮件验证码，请填写 Resend API Key 和发件邮箱')
+    return false
+  }
+
+  if (!validateOAuthProviders()) {
     return false
   }
 
@@ -214,6 +389,11 @@ const items = [{
   icon: 'i-carbon-chat',
   defaultOpen: false,
   slot: 'notify-settings',
+}, {
+  label: 'OAuth2 登录',
+  icon: 'i-carbon-login',
+  defaultOpen: false,
+  slot: 'oauth-settings',
 }]
 
 const emailSending = ref(false)
@@ -509,6 +689,118 @@ async function copyWebhook() {
                 <UInput v-model="state.notify.tgBotName" autocomplete="off" />
               </UFormGroup>
             </div>
+          </div>
+        </template>
+
+        <template #oauth-settings>
+          <div class="flex flex-col space-y-3">
+            <p class="text-sm text-gray-500">
+              配置后登录页会出现对应的第三方登录按钮。已存在的邮箱账号会在首次第三方登录时自动绑定，不会重复创建用户。
+            </p>
+
+            <div v-if="!state.oauth2.providers.length" class="text-sm text-gray-400">
+              还没有配置任何第三方登录方式，点击下方按钮添加。
+            </div>
+
+            <div
+              v-for="(provider, index) in state.oauth2.providers"
+              :key="`${provider.key}-${index}`"
+              class="rounded border border-gray-200 dark:border-slate-700 p-3 space-y-3"
+            >
+              <div class="flex flex-wrap items-end gap-3">
+                <UFormGroup label="启用" class="w-[80px]">
+                  <UToggle v-model="provider.enabled" />
+                </UFormGroup>
+                <UFormGroup label="类型" class="w-[170px]">
+                  <USelectMenu
+                    v-model="provider.type"
+                    :options="oauthTypeOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                    @change="applyOAuthTypeChange(provider)"
+                  />
+                </UFormGroup>
+                <UFormGroup label="标识" class="w-[170px]" hint="小写字母/数字/-/_">
+                  <UInput v-model="provider.key" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="显示名称" class="w-[170px]">
+                  <UInput v-model="provider.name" autocomplete="off" />
+                </UFormGroup>
+                <UButton class="mb-1" color="red" variant="soft" size="xs" @click="removeOAuthProvider(index)">
+                  删除
+                </UButton>
+              </div>
+
+              <div class="flex flex-row space-x-2">
+                <UFormGroup label="Client ID" class="w-[320px]">
+                  <UInput v-model="provider.clientId" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="Client Secret" class="w-[320px]">
+                  <UInput v-model="provider.clientSecret" type="password" autocomplete="off" />
+                </UFormGroup>
+              </div>
+
+              <div class="flex flex-row space-x-2">
+                <UFormGroup label="授权地址 (Authorize URL)" class="w-[320px]">
+                  <UInput v-model="provider.authorizeUrl" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="令牌地址 (Token URL)" class="w-[320px]">
+                  <UInput v-model="provider.tokenUrl" autocomplete="off" />
+                </UFormGroup>
+              </div>
+
+              <div class="flex flex-row space-x-2">
+                <UFormGroup label="用户信息地址 (UserInfo URL)" class="w-[320px]">
+                  <UInput v-model="provider.userInfoUrl" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="Scope" class="w-[320px]" hint="多个用空格分隔">
+                  <UInput v-model="provider.scope" autocomplete="off" />
+                </UFormGroup>
+              </div>
+
+              <div class="flex flex-row space-x-2">
+                <UFormGroup label="用户 ID 字段" class="w-[150px]">
+                  <UInput v-model="provider.idField" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="邮箱字段" class="w-[150px]">
+                  <UInput v-model="provider.emailField" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="昵称字段" class="w-[150px]">
+                  <UInput v-model="provider.nameField" autocomplete="off" />
+                </UFormGroup>
+                <UFormGroup label="头像字段" class="w-[150px]">
+                  <UInput v-model="provider.avatarField" autocomplete="off" />
+                </UFormGroup>
+              </div>
+
+              <div class="flex flex-wrap items-end gap-3">
+                <UFormGroup label="首次登录自动注册" class="w-[170px]">
+                  <div class="flex items-center gap-3">
+                    <UToggle v-model="provider.autoRegister" />
+                    <span class="text-sm text-gray-500">{{ provider.autoRegister ? '是' : '否' }}</span>
+                  </div>
+                </UFormGroup>
+                <UButton class="mb-1" size="xs" color="gray" variant="soft" @click="copyOAuthCallbackUrl(provider)">
+                  复制回调地址
+                </UButton>
+                <span class="mb-1 text-xs text-gray-400 break-all">{{ oauthCallbackUrl(provider) }}</span>
+              </div>
+            </div>
+
+            <UButtonGroup size="sm" orientation="horizontal" class="w-fit">
+              <UButton color="gray" variant="soft" @click="addOAuthProvider('github')">
+                + GitHub
+              </UButton>
+              <UButton color="gray" variant="soft" @click="addOAuthProvider('google')">
+                + Google
+              </UButton>
+              <UButton color="gray" variant="soft" @click="addOAuthProvider('gitee')">
+                + Gitee
+              </UButton>
+              <UButton color="gray" variant="soft" @click="addOAuthProvider('generic')">
+                + 自定义
+              </UButton>
+            </UButtonGroup>
           </div>
         </template>
       </UAccordion>

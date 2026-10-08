@@ -3,7 +3,38 @@ import { getLength } from '~/utils'
 
 export type UserRole = 'ADMIN' | 'USER'
 export type UserStatus = 'NORMAL' | 'BANNED'
+export type OAuthProviderType = 'github' | 'google' | 'gitee' | 'generic'
 export type PointReason = 'POST' | 'COMMENT' | 'LIKE' | 'DISLIKE' | 'SIGNIN' | 'PUNISH' | 'INVITE' | 'SEND' | 'PUTIN' | 'INCOME'
+
+/** 系统设置里完整保存的 OAuth2 服务商配置（含密钥，仅管理员可见） */
+export interface OAuthProviderDTO {
+  key: string
+  type: OAuthProviderType
+  name: string
+  enabled: boolean
+  clientId: string
+  clientSecret: string
+  authorizeUrl: string
+  tokenUrl: string
+  userInfoUrl: string
+  scope: string
+  idField: string
+  emailField: string
+  nameField: string
+  avatarField: string
+  autoRegister: boolean
+}
+
+export interface OAuth2ConfigDTO {
+  providers: OAuthProviderDTO[]
+}
+
+/** /api/config 公开暴露的 OAuth 信息，只够渲染登录按钮 */
+export interface PublicOAuthProviderDTO {
+  key: string
+  name: string
+  type: OAuthProviderType
+}
 
 export const regRequestSchema = z
   .object({
@@ -215,6 +246,7 @@ export interface SysConfigDTO {
     tgBotName: string
     tgSecret: string
   }
+  oauth2: OAuth2ConfigDTO
   upload: {
     imgStrategy: 'r2'
     attachmentStrategy: 'r2'

@@ -84,6 +84,7 @@ npm run cf:deploy
 ## 当前已覆盖的核心能力
 
 - 注册、登录、个人设置
+- OAuth2 第三方登录（GitHub / Google / Gitee 及自定义服务商）
 - 发帖、回帖、收藏、帖子支持
 - 点赞 / 点踩评论
 - 站内消息、私信、Telegram webhook 绑定通知
@@ -92,3 +93,36 @@ npm run cf:deploy
 - 邀请码、积分、签到、隐藏内容付费查看
 - R2 图片上传
 邮件发送已经切到 Resend。部署后请在后台“系统设置 > 邮件设置”中填写 `Resend API Key`、发件邮箱和发件人名称；如果启用了邮箱验证码注册，注册验证码和找回密码邮件也会走 Resend。
+
+## OAuth2 第三方登录
+
+后台“系统设置 > OAuth2 登录”里可以配置一个或多个第三方登录方式，配置保存在 D1（`sys_config`），不需要额外环境变量。开启后登录页会自动出现对应的登录按钮。
+
+以 GitHub 为例：
+
+1. 在 GitHub 打开 `Settings > Developer settings > OAuth Apps > New OAuth App`。
+2. `Authorization callback URL` 填 `https://你的域名/api/oauth/callback?provider=github`（在后台点“复制回调地址”可直接得到）。
+3. 回到后台填入 `Client ID` 与 `Client Secret`，打开“启用”，保存。
+
+匹配规则：
+
+- 同一个第三方账号第二次登录会直接命中 `oauth_accounts` 绑定关系。
+- 第三方返回的邮箱若已存在本地账号，会自动绑定到该账号，不会重复建号。
+- 其余情况在“首次登录自动注册”开启时会自动创建账号（用户名由昵称生成并自动去重，头像沿用邮箱 Gravatar），关闭则提示先注册。
+
+安全要点：
+
+- `clientSecret` 只在管理员接口 `/api/manage/config/get` 返回，公开的 `/api/config` 只暴露按钮所需的 `key / name / type`。
+- 授权回调使用 HMAC 签名的 `state`（10 分钟有效）防 CSRF，`client_secret` 只保存在服务端换取令牌时使用。
+- 自动创建的账号使用随机口令，无法通过密码登录；忘记密码流程对其无效，请用第三方方式登录。
+
+已内置的字段预设（自定义服务商可手改）：
+
+| 服务商 | 用户信息地址 | 用户 ID 字段 | 邮箱字段 | 昵称字段 | 头像字段 |
+| --- | --- | --- | --- | --- | --- |
+| GitHub | `https://api.github.com/user` | `id` | `email` | `name` | `avatar_url` |
+| Google | `https://openidconnect.googleapis.com/v1/userinfo` | `sub` | `email` | `name` | `picture` |
+| Gitee | `https://gitee.com/api/v5/user` | `id` | `email` | `name` | `avatar_url` |
+
+> GitHub 默认不返回邮箱，代码会自动再请求 `/user/emails` 取主邮箱（需要 `user:email` scope）。
+
