@@ -35,10 +35,14 @@ const avatarUrl = computed(() => {
   return getAvatarUrl(userinfo.avatarUrl!, state.headImg)
 })
 async function onSubmit(event: FormSubmitEvent<Schema>) {
-  await $fetch('/api/member/saveSettings', {
+  const result = await $fetch<{ success: boolean, message?: string }>('/api/member/saveSettings', {
     method: 'POST',
     body: JSON.stringify(event.data),
   })
+  if (!result.success) {
+    toast.error(result.message || '保存失败')
+    return
+  }
   if (event.data.password) {
     toast.success('密码修改成功,请重新登录')
     await refreshCookie(config.public.tokenKey)
@@ -104,7 +108,7 @@ async function uploadAvatar(event: Event) {
       </div>
     </template>
     <UForm :schema="saveSettingsRequestSchema" :state="state" class="space-y-4" @submit="onSubmit">
-      <UFormGroup label="昵称" name="nickname" hint="站点上显示的名字，留空则显示为「用户+随机码」">
+      <UFormGroup label="昵称" name="nickname" hint="站点上显示的名字，不可重复；留空则显示为「用户+随机码」">
         <UInput v-model="state.nickname" type="text" maxlength="24" placeholder="例如：弦卷心" />
       </UFormGroup>
       <UFormGroup label="用户名">

@@ -1,7 +1,7 @@
 import type { Env } from './types'
 import { first, run, queryCount } from './db'
 import { DAY_MS, base64urlDecode, base64urlEncode, normalizeEmail, nowIso, randomId, sha256Hex } from './utils'
-import { buildCookie, createToken, getTokenKey, hashPassword, signHmac } from './auth'
+import { buildCookie, createToken, getTokenKey, hashPassword, isNicknameTaken, signHmac } from './auth'
 
 export type OAuthProviderType = 'github' | 'google' | 'gitee' | 'generic'
 
@@ -546,7 +546,7 @@ async function resolveOAuthUser(
   const secretKey = randomId('')
   const role = userCount === 0 ? 'ADMIN' : 'USER'
   // 用户名默认不公开（校园网里往往就是学号），把服务商返回的真实姓名放进昵称作为显示名
-  const nickname = displayName ? displayName.slice(0, 24) : null
+  const nickname = await buildUniqueNickname(env, displayName)
 
   await run(env, `
     INSERT INTO users (
@@ -648,4 +648,31 @@ async function buildUniqueUsername(env: Env, candidates: string[]) {
   }
 
   return `user${Date.now().toString(36)}`
+}
+
+/**
+ * 昵称全局唯一（迁移 0006）。自动建号时服务商给出的姓名可能和别人重名，
+ * 这里加数字后缀去重；排不开就留空（页面回退显示「用户xxxx」），
+ * 既不伪造名字，也不因为重名而拒绝登录。
+ */
+async function buildUniqueNickname(env: Env, base: string | null | undefined) {
+  const cleaned = String(base ?? '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+
+  if (!cleaned) {
+    return null
+  }
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const suffix = attempt === 0 ? '' : String(attempt)
+    const name = `${cleaned.slice(0, 24 - suffix.length)}${suffix}`
+    if (!(await isNicknameTaken(env, name))) {
+      return name
+    }
+  }
+
+  return null
 }

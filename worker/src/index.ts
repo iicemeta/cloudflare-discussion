@@ -6,7 +6,7 @@ import { json, jsonError, readBody, nowIso, getPage, getSize, randomId, sha256He
 import { hashPassword } from './auth'
 import { queryPointSum } from './post'
 import { all, first, run, queryCount } from './db'
-import { getCurrentUser, isAdmin, buildCookie, expireCookie, getTokenKey, mapCurrentUser, sanitizeUser, ensureUserSecretKey, publicUsernameFields } from './auth'
+import { getCurrentUser, isAdmin, buildCookie, expireCookie, getTokenKey, mapCurrentUser, sanitizeUser, ensureUserSecretKey, publicUsernameFields, isNicknameTaken } from './auth'
 import { defaultSysConfig, getSysConfig, getPublicSysConfig, saveSysConfig } from './config'
 import { buildTagListResponse, buildMemberHotResponse, mapTag } from './tag'
 import { buildPostListResponse, handlePostDetail, buildPostSummaries, syncPostPoint, getPostListInputFromUrl } from './post'
@@ -467,6 +467,11 @@ async function handleRegister(request: Request, env: Env) {
     return json({ success: false, message: '用户名/邮箱已经存在了' })
   }
 
+  const nickname = normalizeNickname(body.nickname)
+  if (await isNicknameTaken(env, nickname)) {
+    return json({ success: false, message: `昵称「${nickname}」已被占用，请换一个` })
+  }
+
   let inviteRow: any = null
   let inviteUserId: number | null = null
   if (config.invite) {
@@ -519,7 +524,6 @@ async function handleRegister(request: Request, env: Env) {
   const secretKey = randomId('')
   const role = userCount === 0 ? 'ADMIN' : 'USER'
   const now = nowIso()
-  const nickname = normalizeNickname(body.nickname)
 
   await run(env, `
     INSERT INTO users (
@@ -574,6 +578,11 @@ async function handleSaveSettings(request: Request, env: Env, currentUser: Curre
   const signature = normalizeNullableStringWrapper(body.signature)
   const nickname = normalizeNickname(body.nickname)
   const usernameVisible = body.usernameVisible ? 1 : 0
+
+  // 昵称是站点显示名，全局唯一（数据库侧有索引兜底，这里给出可读报错）
+  if (await isNicknameTaken(env, nickname, currentUser.uid)) {
+    return json({ success: false, message: `昵称「${nickname}」已被占用，请换一个` })
+  }
 
   if (body.password) {
     const passwordHash = await hashPassword(String(body.password))

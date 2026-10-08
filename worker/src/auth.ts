@@ -186,6 +186,24 @@ export function displayNameOf(user: { nickname?: string | null, username?: strin
   return uid ? `用户${uid.slice(-4)}` : '匿名用户'
 }
 
+/**
+ * 昵称是否已被占用。数据库侧有唯一索引兜底（迁移 0006），
+ * 这里是为了在冲突时能返回一句人能看懂的错误，而不是冒出一个约束异常。
+ * 比较方式与索引保持一致：ASCII 大小写不敏感；空昵称不参与约束。
+ */
+export async function isNicknameTaken(env: Env, nickname: string | null | undefined, excludeUid?: string) {
+  const name = String(nickname ?? '').trim()
+  if (!name) {
+    return false
+  }
+
+  const row = excludeUid
+    ? await first(env, 'SELECT COUNT(*) AS count FROM users WHERE nickname COLLATE NOCASE = ? AND uid <> ?', [name, excludeUid])
+    : await first(env, 'SELECT COUNT(*) AS count FROM users WHERE nickname COLLATE NOCASE = ?', [name])
+
+  return Number(row?.count ?? 0) > 0
+}
+
 export function sanitizeUser(user: CurrentUser, includePrivateFields = false) {
   const usernameVisible = Boolean(user.usernameVisible)
   const payload: Record<string, any> = {
